@@ -1,0 +1,10 @@
+[package]
+name = "cardio"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+num = "0.4.3"
+sprs = "0.11.3"
+vector-map = "1.0.2"
+
