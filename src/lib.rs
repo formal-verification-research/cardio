@@ -1,24 +1,23 @@
 use vector_map::VecMap;
 
-
 /// A trait that represents any type of sparse matrix construction.
 pub trait SparseMatrixBuilder<EntryType>
 where
-	EntryType: num::Num + Clone,
+    EntryType: num::Num + Clone,
 {
-	/// Get the value (if it exists) at row `row` and column `col`. If it does not exist, this
-	/// function will return None.
+    /// Get the value (if it exists) at row `row` and column `col`. If it does not exist, this
+    /// function will return None.
     fn get_value(&self, row: usize, col: usize) -> Option<EntryType>;
-	/// Inserts an element. Depending on the struct implementing this trait, this function may
-	/// either replace existing values, or just panic if a value already exists.
+    /// Inserts an element. Depending on the struct implementing this trait, this function may
+    /// either replace existing values, or just panic if a value already exists.
     fn insert(&mut self, row: usize, col: usize, entry: EntryType);
-	/// Inserts an entire row. Again, depending on the struct implementing the trait, this function
-	/// may replace the entire row, or panic if the row is not none.
-	fn insert_row<I>(&mut self, row: usize, elements: I)
+    /// Inserts an entire row. Again, depending on the struct implementing the trait, this function
+    /// may replace the entire row, or panic if the row is not none.
+    fn insert_row<I>(&mut self, row: usize, elements: I)
     where
         I: ExactSizeIterator<Item = (usize, EntryType)>;
-	/// Creates the sparse matrix from the data.
-	fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType>;
+    /// Creates the sparse matrix from the data.
+    fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType>;
 }
 
 /// A sparse matrix builder that allows for random access and update
@@ -42,11 +41,21 @@ where
 impl<EntryType> RandomAccessSparseMatrixBuilder<EntryType>
 where
     EntryType: num::Num + Clone,
-{	/// The number of nonzero entries in the sparse matrix
-	fn num_entries(&self) -> usize {
-		// Sum the counts of elements for any non-empty row
-		self.data.iter().map(|row_opt| if let Some(row_val) = row_opt { row_val.len() } else { 0 }).sum()
-	}
+{
+    /// The number of nonzero entries in the sparse matrix
+    fn num_entries(&self) -> usize {
+        // Sum the counts of elements for any non-empty row
+        self.data
+            .iter()
+            .map(|row_opt| {
+                if let Some(row_val) = row_opt {
+                    row_val.len()
+                } else {
+                    0
+                }
+            })
+            .sum()
+    }
     /// Creates a new RandomAccessSparseMatrix for CTMC model checking
     pub fn new() -> Self {
         // by default just allocate with a capacity of 5000
@@ -136,19 +145,19 @@ where
         }
     }
 
-	fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType> {
-		// TODO: the direct CSR constructor is more efficient than this. Maybe there's a way to
-		// use that rather than the triplet matrix.
-		let mut triplet_matrix = sprs::TriMatI::new((self.data.len(), self.data.len()));
-		for (row_idx, column_opt) in self.data.iter().enumerate() {
-			if let Some(colum_val) = column_opt {
-				for (col_idx, value) in colum_val.iter() {
-					triplet_matrix.add_triplet(row_idx, *col_idx, value.clone());
-				}
-			}
-		}
-		triplet_matrix.to_csr()
-	}
+    fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType> {
+        // TODO: the direct CSR constructor is more efficient than this. Maybe there's a way to
+        // use that rather than the triplet matrix.
+        let mut triplet_matrix = sprs::TriMatI::new((self.data.len(), self.data.len()));
+        for (row_idx, column_opt) in self.data.iter().enumerate() {
+            if let Some(colum_val) = column_opt {
+                for (col_idx, value) in colum_val.iter() {
+                    triplet_matrix.add_triplet(row_idx, *col_idx, value.clone());
+                }
+            }
+        }
+        triplet_matrix.to_csr()
+    }
 }
 
 #[cfg(test)]
