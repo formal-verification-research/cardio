@@ -2,7 +2,7 @@ use sprs::CsMat;
 use vector_map::VecMap;
 
 /// A trait that represents any type of sparse matrix construction.
-pub trait SparseMatrixBuilder<EntryType>
+pub trait SprsMatBuilder<EntryType>
 where
 	EntryType: num::Num + Clone,
 {
@@ -16,13 +16,20 @@ where
 	/// may replace the entire row, or panic if the row is not none.
 	fn insert_row<I>(&mut self, row: usize, elements: I)
 	where
-		I: ExactSizeIterator<Item = (usize, EntryType)>;
+		I: ExactSizeIterator<Item = (usize, EntryType)>,
+	{
+		for (col, entry) in elements {
+			self.insert(row, col, entry);
+		}
+	}
 	/// Creates the sparse matrix from the data.
 	fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType>;
 }
 
-/// A sparse matrix builder that allows for random access and update
-pub struct RandomAccessSparseMatrixBuilder<EntryType>
+/// A sparse matrix builder that allows for random access and updating and is optimized for VAS and
+/// CRNs. I.e., models that have only a few abstract transitions, but potentially large numbers of
+/// states.
+pub struct OptimalSprsMatBuilder<EntryType>
 where
 	EntryType: num::Num + Clone, // All we require for the entry is a numeric type
 {
@@ -41,7 +48,7 @@ where
 	abstract_transition_count: Option<usize>,
 }
 
-impl<EntryType> RandomAccessSparseMatrixBuilder<EntryType>
+impl<EntryType> OptimalSprsMatBuilder<EntryType>
 where
 	EntryType: num::Num + Clone,
 {
@@ -59,13 +66,14 @@ where
 			})
 			.sum()
 	}
-	/// Creates a new RandomAccessSparseMatrix for CTMC model checking
+
+	/// Creates a new OptimalSparseMatrix for CTMC model checking
 	pub fn new() -> Self {
 		// by default just allocate with a capacity of 5000
 		Self::with_row_capacity(5000, None)
 	}
 
-	/// Creates a new RandomAccessSparseMatrix for CTMC model checking with a known capacity
+	/// Creates a new OptimalSparseMatrix for CTMC model checking with a known capacity
 	pub fn with_row_capacity(capacity: usize, abstract_transition_count: Option<usize>) -> Self {
 		Self {
 			data: Vec::with_capacity(capacity),
@@ -78,8 +86,8 @@ where
 	/// Resizes the underlying datastructure by using Rust's efficient `resize_with`. This function
 	/// does NOT shrink the datastructure--only increasing the size if necessary.
 	pub fn resize(&mut self, size: usize) {
-		if size > self.data.len() {
-			self.data.resize_with(size, Default::default)
+		if size >= self.data.len() {
+			self.data.resize_with(size + 1, Default::default)
 		}
 	}
 
@@ -94,7 +102,7 @@ where
 	}
 }
 
-impl<EntryType> SparseMatrixBuilder<EntryType> for RandomAccessSparseMatrixBuilder<EntryType>
+impl<EntryType> SprsMatBuilder<EntryType> for OptimalSprsMatBuilder<EntryType>
 where
 	EntryType: num::Num + Clone,
 {
@@ -134,7 +142,7 @@ where
 		// We can unwrap because we've just guaranteed that the element is non-zero
 		let row_values = &mut self.data[row].as_mut().unwrap();
 		if let Some(_old_value) = row_values.insert(col, entry) {
-			todo!("Add logging code to warn of overwrite")
+			eprintln!("Warning: overwrite");
 		} else {
 			self.length += 1;
 		}
@@ -154,7 +162,11 @@ where
 		self.data[row] = Some(VecMap::with_capacity(elements.len()));
 		let row_values = &mut self.data[row].as_mut().unwrap();
 		for (col, entry) in elements {
-			row_values.insert(col, entry);
+			if let Some(_old_value) = row_values.insert(col, entry) {
+				eprintln!("Warning: overwrite");
+			} else {
+				self.length += 1;
+			}
 		}
 	}
 
@@ -177,7 +189,67 @@ where
 	}
 }
 
+type ExplicitSprsMatBuilder<EntryType> = sprs::TriMat<EntryType>;
+
+impl<EntryType> SprsMatBuilder<EntryType> for ExplicitSprsMatBuilder<EntryType>
+where
+	EntryType: num::Num + Clone,
+{
+	/// See documentation for `TriMat::add_triplet`
+	fn insert(&mut self, row: usize, col: usize, entry: EntryType) {
+		self.add_triplet(row, col, entry);
+	}
+
+	/// Only returns the first time the triplet was added
+	fn get_value(&self, row: usize, col: usize) -> Option<EntryType> {
+		let idxes = self.find_locations(row, col);
+		if idxes.len() == 0 {
+			None
+		} else {
+			let idx = idxes[0].0;
+			Some(self.data()[idx].clone())
+		}
+	}
+
+	/// See documentation for `TriMat::to_csc()`
+	fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType> {
+		self.to_csc()
+	}
+}
+
 #[cfg(test)]
 mod tests {
+	use num::ToPrimitive;
+
 	use super::*;
+
+	#[test]
+	fn length_test() {
+		let mut mat_builder = OptimalSprsMatBuilder::<f64>::new();
+		let mut num_inserted: usize = 0;
+		for (row, col) in (0..=150).zip(0..150) {
+			let entry = (row + 1).to_f64().unwrap() / col.to_f64().unwrap();
+			mat_builder.insert(row, col, entry);
+			num_inserted += 1;
+			assert_eq!(mat_builder.len(), num_inserted);
+		}
+
+		for (row, col) in (0..=150).zip(0..150) {
+			let entry = (row + 1).to_f64().unwrap() / col.to_f64().unwrap();
+			assert_eq!(mat_builder.get_value(row, col).unwrap(), entry);
+		}
+	}
+
+	#[test]
+	fn overwrite_test() {
+		let mut mat_builder = OptimalSprsMatBuilder::<f64>::new();
+		mat_builder.insert(1, 6, 0.1);
+		assert_eq!(mat_builder.len(), 1);
+		assert_eq!(mat_builder.get_value(1, 6), Some(0.1));
+		eprintln!("Testing the overwrite functionality. Length should remain the same");
+		mat_builder.insert(1, 6, 0.2);
+		assert_eq!(mat_builder.len(), 1);
+		assert_eq!(mat_builder.get_value(1, 6), Some(0.2));
+		assert_eq!(mat_builder.get_value(2, 6), None);
+	}
 }
