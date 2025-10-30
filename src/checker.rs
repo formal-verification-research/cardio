@@ -11,7 +11,6 @@ where
 	EntryType: num::Num + Clone,
 {
 	fn uniformize(rate_mat: Self) -> Self {
-	    unimplemented!();
+		unimplemented!();
 	}
 }
-

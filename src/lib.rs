@@ -1,5 +1,5 @@
-pub mod matrix;
 pub mod checker;
+pub mod matrix;
 
 pub enum PropertyType {
 	SteadyStateProbability,
