@@ -252,4 +252,24 @@ mod tests {
 		assert_eq!(mat_builder.get_value(1, 6), Some(0.2));
 		assert_eq!(mat_builder.get_value(2, 6), None);
 	}
+
+	#[test]
+	fn out_of_order_test() {
+		let mut mat_builder = OptimalSprsMatBuilder::<f64>::new();
+		let mut num_inserted: usize = 0;
+		// Iterate in the reverse direction
+		for (row, col) in (1..=150).rev().zip((1..=150).rev()) {
+			let entry = (row + 1).to_f64().unwrap() / col.to_f64().unwrap();
+			eprintln!("{row},{col}:{entry}");
+			mat_builder.insert(row, col, entry);
+			num_inserted += 1;
+			assert_eq!(mat_builder.len(), num_inserted);
+		}
+		// Check in the forward direction
+		for (row, col) in (1..=150).zip(1..=150) {
+			let entry = (row + 1).to_f64().unwrap() / col.to_f64().unwrap();
+			eprintln!("{row},{col}:{entry}");
+			assert_eq!(mat_builder.get_value(row, col).unwrap(), entry);
+		}
+	}
 }
