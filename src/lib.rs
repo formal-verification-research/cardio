@@ -1,3 +1,4 @@
+use sprs::CsMat;
 use vector_map::VecMap;
 
 /// A trait that represents any type of sparse matrix construction.
@@ -29,6 +30,8 @@ where
     /// only 5-30 reactions. Therefore it will be more efficient than dealing with the overhead of
     /// a `HashMap` or a `BTreeMap` for every single element.
     data: Vec<Option<VecMap<usize, EntryType>>>,
+    /// The number of elements (not the number of reserved elements) in the builder
+    length: usize,
     /// During state insertion, this will be set as the maximal y (destination) values from attempted
     /// insertions (x a.k.a., source must be resized immediately).
     queued_new_size: usize,
@@ -43,7 +46,7 @@ where
     EntryType: num::Num + Clone,
 {
     /// The number of nonzero entries in the sparse matrix
-    fn num_entries(&self) -> usize {
+    pub fn num_entries(&self) -> usize {
         // Sum the counts of elements for any non-empty row
         self.data
             .iter()
@@ -67,6 +70,7 @@ where
         Self {
             data: Vec::with_capacity(capacity),
             queued_new_size: capacity,
+            length: 0,
             abstract_transition_count,
         }
     }
@@ -82,6 +86,11 @@ where
     /// Applies the queued new size to the datastructure size
     pub fn apply_queued_size(&mut self) {
         self.resize(self.queued_new_size);
+    }
+
+    /// Gets the number of elements in the
+    pub fn len(&self) -> usize {
+        self.length
     }
 }
 
@@ -124,7 +133,11 @@ where
         }
         // We can unwrap because we've just guaranteed that the element is non-zero
         let row_values = &mut self.data[row].as_mut().unwrap();
-        row_values.insert(col, entry);
+        if let Some(_old_value) = row_values.insert(col, entry) {
+            todo!("Add logging code to warn of overwrite")
+        } else {
+            self.length += 1;
+        }
     }
 
     /// Inserts an entire row in the sparse matrix.
@@ -144,19 +157,23 @@ where
             row_values.insert(col, entry);
         }
     }
-
+	
+	/// I attempted to optimize this function by pre-allocating the size for each triplet vector
     fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType> {
-        // TODO: the direct CSR constructor is more efficient than this. Maybe there's a way to
-        // use that rather than the triplet matrix.
-        let mut triplet_matrix = sprs::TriMatI::new((self.data.len(), self.data.len()));
-        for (row_idx, column_opt) in self.data.iter().enumerate() {
-            if let Some(colum_val) = column_opt {
-                for (col_idx, value) in colum_val.iter() {
-                    triplet_matrix.add_triplet(row_idx, *col_idx, value.clone());
+        let state_count = self.len();
+        let mut rows = Vec::<usize>::with_capacity(state_count);
+        let mut cols = Vec::<usize>::with_capacity(state_count);
+        let mut values = Vec::<EntryType>::with_capacity(state_count);
+        for (row, col_option) in self.data.iter().enumerate() {
+            if let Some(col_data) = col_option {
+                for (col, value) in col_data.iter() {
+                    rows.push(row);
+                    cols.push(*col);
+                    values.push(value.clone());
                 }
             }
         }
-        triplet_matrix.to_csr()
+        CsMat::new_csc((state_count, state_count), rows, cols, values)
     }
 }
 
