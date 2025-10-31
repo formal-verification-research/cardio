@@ -36,7 +36,7 @@ where
 		let state_count = states.len();
 
 		// First, create the state rewards. This one we will do explicitly.
-		
+
 		// Reserve vectors with capacity based on the size hint. If the size hint doesn't exist, we
 		// will use the state count since at *most* these vectors are that size. However, depending
 		// on the rewards structure, the user may be able to know a better hint.
