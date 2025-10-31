@@ -14,3 +14,11 @@ where
 		unimplemented!();
 	}
 }
+
+pub struct CslChecker<EntryType>
+where
+	EntryType: num::Num + Clone,
+{
+	qualitative: bool,
+	placeholder: EntryType,
+}

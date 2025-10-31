@@ -1,5 +1,6 @@
 pub mod checker;
 pub mod matrix;
+pub mod rewards;
 
 pub enum PropertyType {
 	SteadyStateProbability,
