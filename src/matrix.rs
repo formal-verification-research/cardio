@@ -1,10 +1,20 @@
+use num::{BigRational, Rational32, Rational64};
 use sprs::CsMat;
 use vector_map::VecMap;
+
+/// A trait representing what we need for a matrix entry
+pub trait MatEntry: num::Num + Clone + std::iter::Sum + std::cmp::PartialOrd {}
+
+impl MatEntry for f64 {}
+impl MatEntry for f32 {}
+impl MatEntry for BigRational {}
+impl MatEntry for Rational64 {}
+impl MatEntry for Rational32 {}
 
 /// A trait that represents any type of sparse matrix construction.
 pub trait SprsMatBuilder<EntryType>
 where
-	EntryType: num::Num + Clone,
+	EntryType: MatEntry,
 {
 	/// Get the value (if it exists) at row `row` and column `col`. If it does not exist, this
 	/// function will return None.
@@ -22,8 +32,12 @@ where
 			self.insert(row, col, entry);
 		}
 	}
+	/// The sum of a row.
+	fn row_sum(&self, row: usize) -> Option<EntryType>;
 	/// Creates the sparse matrix from the data.
 	fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType>;
+	/// Creates a uniformized matrix.
+	fn to_unif_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>);
 }
 
 /// A sparse matrix builder that allows for random access and updating and is optimized for VAS and
@@ -31,7 +45,7 @@ where
 /// states.
 pub struct OptimalSprsMatBuilder<EntryType>
 where
-	EntryType: num::Num + Clone, // All we require for the entry is a numeric type
+	EntryType: MatEntry, // All we require for the entry is a numeric type
 {
 	/// The actual data storage. We use a `VecMap` here since most models we've encountered have
 	/// only 5-30 reactions. Therefore it will be more efficient than dealing with the overhead of
@@ -50,18 +64,18 @@ where
 
 impl<EntryType> OptimalSprsMatBuilder<EntryType>
 where
-	EntryType: num::Num + Clone,
+	EntryType: MatEntry,
 {
 	/// The number of nonzero entries in the sparse matrix
 	pub fn num_entries(&self) -> usize {
 		// Sum the counts of elements for any non-empty row
 		self.data
 			.iter()
-			.map(|row_opt| {
+			.filter_map(|row_opt| {
 				if let Some(row_val) = row_opt {
-					row_val.len()
+					Some(row_val.len())
 				} else {
-					0
+					None
 				}
 			})
 			.sum()
@@ -96,7 +110,7 @@ where
 		self.resize(self.queued_new_size);
 	}
 
-	/// Gets the number of elements in the
+	/// Gets the number of elements in the matrix
 	pub fn len(&self) -> usize {
 		self.length
 	}
@@ -104,7 +118,7 @@ where
 
 impl<EntryType> SprsMatBuilder<EntryType> for OptimalSprsMatBuilder<EntryType>
 where
-	EntryType: num::Num + Clone,
+	EntryType: MatEntry,
 {
 	/// Gets the value at a particular row and column
 	fn get_value(&self, row: usize, col: usize) -> Option<EntryType> {
@@ -170,6 +184,20 @@ where
 		}
 	}
 
+	/// Gets the sum of a row. Useful for uniformization in CTMCs.
+	fn row_sum(&self, row: usize) -> Option<EntryType> {
+		if row < self.data.len() {
+			if let Some(row_val) = &self.data[row] {
+				let sm = row_val.iter().map(|(_k, v)| v.clone()).sum();
+				Some(sm)
+			} else {
+				None
+			}
+		} else {
+			None
+		}
+	}
+
 	/// I attempted to optimize this function by pre-allocating the size for each triplet vector
 	fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType> {
 		let state_count = self.len();
@@ -187,13 +215,46 @@ where
 		}
 		CsMat::new_csc((state_count, state_count), rows, cols, values)
 	}
+
+	fn to_unif_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>) {
+		let state_count = self.len();
+		let row_cnt = self.data.len();
+		let mut rows = Vec::<usize>::with_capacity(state_count + row_cnt);
+		let mut cols = Vec::<usize>::with_capacity(state_count + row_cnt);
+		let mut values = Vec::<EntryType>::with_capacity(state_count + row_cnt);
+		let mut epoch = EntryType::zero();
+		for (row, col_option) in self.data.iter().enumerate() {
+			let row_sum = self.row_sum(row);
+			if let Some(col_data) = col_option {
+				for (col, value) in col_data.iter() {
+					rows.push(row);
+					cols.push(*col);
+					values.push(value.clone());
+				}
+			}
+			// Add the negative diagonal entry
+			if let Some(row_sum) = row_sum {
+				rows.push(row);
+				cols.push(row);
+				values.push(row_sum.clone());
+				// Update the epoch
+				if row == 0 || epoch > row_sum {
+					epoch = row_sum;
+				}
+			}
+		}
+		(
+			epoch,
+			CsMat::new_csc((state_count, state_count), rows, cols, values),
+		)
+	}
 }
 
 type ExplicitSprsMatBuilder<EntryType> = sprs::TriMat<EntryType>;
 
 impl<EntryType> SprsMatBuilder<EntryType> for ExplicitSprsMatBuilder<EntryType>
 where
-	EntryType: num::Num + Clone,
+	EntryType: MatEntry,
 {
 	/// See documentation for `TriMat::add_triplet`
 	fn insert(&mut self, row: usize, col: usize, entry: EntryType) {
@@ -211,9 +272,25 @@ where
 		}
 	}
 
+	/// Highly unoptimized
+	fn row_sum(&self, row: usize) -> Option<EntryType> {
+		if row < self.rows() {
+			let sm = (0..self.cols())
+				.filter_map(|col| self.get_value(row, col))
+				.sum();
+			Some(sm)
+		} else {
+			None
+		}
+	}
+
 	/// See documentation for `TriMat::to_csc()`
 	fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType> {
 		self.to_csc()
+	}
+
+	fn to_unif_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>) {
+		unimplemented!();
 	}
 }
 

@@ -9,7 +9,7 @@ use crate::matrix::*;
 pub struct AbstractRewards<StateType, ValType>
 where
 	StateType: PartialEq,
-	ValType: num::Num + Clone,
+	ValType: MatEntry,
 {
 	/// The name of this rewards structure
 	name: String,
@@ -28,7 +28,7 @@ where
 impl<StateType, ValType> AbstractRewards<StateType, ValType>
 where
 	StateType: PartialEq,
-	ValType: num::Num + Clone,
+	ValType: MatEntry,
 {
 	/// Creates a new abstract rewards structure. Requires a name and the rewards function.
 	pub fn new(
@@ -132,7 +132,7 @@ where
 /// functions, as in `AbstractRewards`.
 pub struct ExplicitRewards<ValType>
 where
-	ValType: num::Num + Clone,
+	ValType: MatEntry,
 {
 	/// The name of this explicit rewards structure
 	name: String,
@@ -152,7 +152,7 @@ where
 
 impl<ValType> ExplicitRewards<ValType>
 where
-	ValType: num::Num + Clone,
+	ValType: MatEntry,
 {
 	/// Create explicit rewards from pre-built state reward vectors and transition rewards matrix.
 	pub fn from_raw(
