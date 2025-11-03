@@ -1,9 +1,23 @@
+use std::ops::{Add, Deref, Div, Mul, Sub};
+
 use num::{BigRational, Rational32, Rational64};
-use sprs::CsMat;
+use sprs::{CsMat, CsMatBase, SparseMat};
 use vector_map::VecMap;
 
 /// A trait representing what we need for a matrix entry
-pub trait MatEntry: num::Num + num::Signed + Clone + std::iter::Sum + std::cmp::PartialOrd {}
+pub trait MatEntry:
+	num::Num
+	+ num::Signed
+	+ Clone
+	+ Sized
+	+ std::iter::Sum
+	+ std::cmp::PartialOrd
+	+ Div
+	+ Add
+	+ Mul
+	+ Sub
+{
+}
 
 impl MatEntry for f64 {}
 impl MatEntry for f32 {}
@@ -36,7 +50,9 @@ where
 	fn row_sum(&self, row: usize) -> Option<EntryType>;
 	/// Creates the sparse matrix from the data.
 	fn to_sparse_matrix(&self) -> sprs::CsMat<EntryType>;
-	/// Creates a uniformized matrix.
+	/// Creates an infantesimile generator matrix.
+	fn to_inf_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>);
+	/// Creates a uniformized matrix, suitable for model checking.
 	fn to_unif_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>);
 }
 
@@ -216,7 +232,7 @@ where
 		CsMat::new_csc((state_count, state_count), rows, cols, values)
 	}
 
-	fn to_unif_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>) {
+	fn to_inf_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>) {
 		let state_count = self.len();
 		let row_cnt = self.data.len();
 		let mut rows = Vec::<usize>::with_capacity(state_count + row_cnt);
@@ -247,6 +263,16 @@ where
 			epoch,
 			CsMat::new_csc((state_count, state_count), rows, cols, values),
 		)
+	}
+
+	fn to_unif_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>) {
+		let (epoch, inf_matrix) = self.to_inf_matrix();
+		// Assert that the matrix is square
+		assert!(inf_matrix.rows() == inf_matrix.cols());
+		let scalar_matrix = inf_matrix.map(|entry| *entry / epoch);
+		// Uniformize the infantesimile generator matrix
+		let unif_matrix = CsMat::<EntryType>::eye(inf_matrix.rows()) - scalar_matrix;
+		(epoch.clone(), unif_matrix)
 	}
 }
 
@@ -290,6 +316,10 @@ where
 	}
 
 	fn to_unif_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>) {
+		unimplemented!();
+	}
+
+	fn to_inf_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>) {
 		unimplemented!();
 	}
 }
