@@ -1,7 +1,7 @@
-use std::ops::{Add, Deref, Div, Mul, Sub};
+use std::ops::{Add, Div, Mul, Sub};
 
-use num::{BigRational, Rational32, Rational64};
-use sprs::{CsMat, CsMatBase, SparseMat};
+use num::{BigRational, Rational32, Rational64, Zero};
+use sprs::CsMat;
 use vector_map::VecMap;
 
 /// A trait representing what we need for a matrix entry
@@ -9,6 +9,7 @@ pub trait MatEntry:
 	num::Num
 	+ num::Signed
 	+ Clone
+	+ Default
 	+ Sized
 	+ std::iter::Sum
 	+ std::cmp::PartialOrd
@@ -16,6 +17,7 @@ pub trait MatEntry:
 	+ Add
 	+ Mul
 	+ Sub
+	+ Zero
 {
 }
 
