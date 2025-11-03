@@ -3,7 +3,7 @@ use sprs::CsMat;
 use vector_map::VecMap;
 
 /// A trait representing what we need for a matrix entry
-pub trait MatEntry: num::Num + Clone + std::iter::Sum + std::cmp::PartialOrd {}
+pub trait MatEntry: num::Num + num::Signed + Clone + std::iter::Sum + std::cmp::PartialOrd {}
 
 impl MatEntry for f64 {}
 impl MatEntry for f32 {}
@@ -209,7 +209,7 @@ where
 				for (col, value) in col_data.iter() {
 					rows.push(row);
 					cols.push(*col);
-					values.push(value.clone());
+					values.push(value.clone().neg());
 				}
 			}
 		}
