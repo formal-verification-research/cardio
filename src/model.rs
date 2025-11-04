@@ -1,5 +1,3 @@
-use std::ops;
-
 use crate::matrix::{MatEntry, SprsMatBuilder};
 use crate::rewards;
 

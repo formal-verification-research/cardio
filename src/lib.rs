@@ -2,6 +2,7 @@ pub mod checker;
 pub mod matrix;
 pub mod model;
 pub mod rewards;
+pub mod poisson;
 
 pub enum PropertyType {
 	SteadyStateProbability,

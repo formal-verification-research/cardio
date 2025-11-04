@@ -22,3 +22,10 @@ where
 	qualitative: bool,
 	placeholder: EntryType,
 }
+
+pub struct CheckContext<EntryType>
+where
+	EntryType: MatEntry,
+{
+	last_dist: CsVec<EntryType>,
+}

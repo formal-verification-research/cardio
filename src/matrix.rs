@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign};
 
 use num::{BigRational, Rational32, Rational64, Zero};
 use sprs::CsMat;
@@ -15,8 +15,11 @@ pub trait MatEntry:
 	+ std::cmp::PartialOrd
 	+ Div
 	+ Add
+	+ AddAssign
 	+ Mul
+	+ MulAssign
 	+ Sub
+	+ SubAssign
 	+ Zero
 {
 }
