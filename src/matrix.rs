@@ -3,7 +3,7 @@ use std::{
 	ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign},
 };
 
-use num::{Rational32, Rational64, Zero};
+use num::{Rational32, Rational64, Zero, pow::Pow};
 use sprs::CsMat;
 use vector_map::VecMap;
 
@@ -25,6 +25,7 @@ pub trait MatEntry:
 	+ Sub
 	+ SubAssign
 	+ Zero
+	+ Pow<i32, Output = Self>
 {
 }
 

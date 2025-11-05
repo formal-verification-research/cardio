@@ -19,10 +19,10 @@ where
 	isize: From<ValueType>,
 	f64: From<ValueType>,
 {
-	left: usize,
-	right: usize,
-	total_weight: ValueType,
-	weights: Vec<ValueType>,
+	pub left: usize,
+	pub right: usize,
+	pub total_weight: ValueType,
+	pub weights: Vec<ValueType>,
 }
 
 impl<ValueType> Default for FoxGlynnBound<ValueType>
