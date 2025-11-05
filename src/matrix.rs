@@ -1,7 +1,4 @@
-use std::{
-	cmp,
-	ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign},
-};
+use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign};
 
 use num::{Rational32, Rational64, Zero, pow::Pow};
 use sprs::CsMat;

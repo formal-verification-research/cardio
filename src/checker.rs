@@ -58,7 +58,7 @@ where
 	f64: From<EntryType>,
 {
 	pub fn compute_transient(&self, context: &mut CheckContext<EntryType>) -> CsVec<EntryType> {
-		let mut lambda = context.epoch * context.time_bound;
+		let lambda = context.epoch * context.time_bound;
 		// Return the initial distribution if no epochs pass.
 		if lambda.is_zero() {
 			return context.distribution.clone();
@@ -88,7 +88,7 @@ where
 		}
 
 		// Create the result vector
-		let mut first_iteration = fg_result.left;
+		let first_iteration = fg_result.left;
 		// let mut result = if first_iteration == 0 {
 		// 	first_iteration += 1;
 		// 	let res = context.distribution.clone();
