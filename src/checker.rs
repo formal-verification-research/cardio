@@ -1,5 +1,6 @@
 use crate::matrix::*;
 use crate::*;
+use sprs::CsVec;
 
 /// A CTMC transition matrix
 pub trait CtmcTransMat {

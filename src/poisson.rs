@@ -1,15 +1,8 @@
 // Poisson sum convergence calculation stuff
 
-use std::f64::{
-	self,
-	consts::{LOG10_E, PI},
-};
+use std::f64::{self, consts::PI};
 
-use num::{
-	Bounded, Float, Zero,
-	complex::ComplexFloat,
-	traits::{float::FloatCore, real::Real},
-};
+use num::{Bounded, traits::real::Real};
 
 use crate::matrix;
 
@@ -21,7 +14,6 @@ where
 		+ std::convert::From<f64>
 		+ std::convert::From<usize>
 		+ std::convert::From<isize>
-		+ Copy
 		+ Real,
 	usize: From<ValueType>,
 	isize: From<ValueType>,
@@ -40,7 +32,6 @@ where
 		+ std::convert::From<f64>
 		+ std::convert::From<usize>
 		+ std::convert::From<isize>
-		+ Copy
 		+ Real,
 	usize: From<ValueType>,
 	isize: From<ValueType>,
@@ -63,7 +54,6 @@ where
 		+ std::convert::From<f64>
 		+ std::convert::From<usize>
 		+ std::convert::From<isize>
-		+ Copy
 		+ Real,
 	usize: From<ValueType>,
 	isize: From<ValueType>,
@@ -286,7 +276,7 @@ where
 				} else {
 					t = j;
 					res.right = j + res.left;
-					res.weights.resize(res.right - res.left, 0.into());
+					res.weights.resize(res.right - res.left, 0.0.into());
 
 					break;
 				}

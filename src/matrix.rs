@@ -1,6 +1,9 @@
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign};
+use std::{
+	cmp,
+	ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign},
+};
 
-use num::{BigRational, Rational32, Rational64, Zero};
+use num::{Rational32, Rational64, Zero};
 use sprs::CsMat;
 use vector_map::VecMap;
 
@@ -9,6 +12,7 @@ pub trait MatEntry:
 	num::Num
 	+ num::Signed
 	+ Clone
+	+ Copy
 	+ Default
 	+ Sized
 	+ std::iter::Sum
@@ -26,7 +30,6 @@ pub trait MatEntry:
 
 impl MatEntry for f64 {}
 impl MatEntry for f32 {}
-impl MatEntry for BigRational {}
 impl MatEntry for Rational64 {}
 impl MatEntry for Rational32 {}
 
@@ -135,6 +138,15 @@ where
 	pub fn len(&self) -> usize {
 		self.length
 	}
+
+	/// Gets the epoch time, i.e., the maximal row sum.
+	pub fn epoch(&self) -> EntryType {
+		let rows = self.data.len();
+		(0..rows)
+			.filter_map(|row| self.row_sum(row))
+			.reduce(|epoch, mid| if epoch < mid { mid } else { epoch })
+			.unwrap_or(EntryType::zero())
+	}
 }
 
 impl<EntryType> SprsMatBuilder<EntryType> for OptimalSprsMatBuilder<EntryType>
@@ -147,7 +159,7 @@ where
 			None
 		} else if let Some(row_val) = &self.data[row] {
 			if let Some(element_val) = row_val.get(&col) {
-				Some(element_val.clone())
+				Some(*element_val)
 			} else {
 				None
 			}
@@ -209,7 +221,7 @@ where
 	fn row_sum(&self, row: usize) -> Option<EntryType> {
 		if row < self.data.len() {
 			if let Some(row_val) = &self.data[row] {
-				let sm = row_val.iter().map(|(_k, v)| v.clone()).sum();
+				let sm = row_val.iter().map(|(_k, v)| *v).sum();
 				Some(sm)
 			} else {
 				None
@@ -230,7 +242,7 @@ where
 				for (col, value) in col_data.iter() {
 					rows.push(row);
 					cols.push(*col);
-					values.push(value.clone().neg());
+					values.push(value.neg());
 				}
 			}
 		}
@@ -250,14 +262,14 @@ where
 				for (col, value) in col_data.iter() {
 					rows.push(row);
 					cols.push(*col);
-					values.push(value.clone());
+					values.push(*value);
 				}
 			}
 			// Add the negative diagonal entry
 			if let Some(row_sum) = row_sum {
 				rows.push(row);
 				cols.push(row);
-				values.push(row_sum.clone());
+				values.push(row_sum);
 				// Update the epoch
 				if row == 0 || epoch > row_sum {
 					epoch = row_sum;
@@ -271,13 +283,34 @@ where
 	}
 
 	fn to_unif_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>) {
-		let (epoch, inf_matrix) = self.to_inf_matrix();
-		// Assert that the matrix is square
-		assert!(inf_matrix.rows() == inf_matrix.cols());
-		let scalar_matrix = inf_matrix.map(|entry| *entry / epoch);
-		// Uniformize the infantesimile generator matrix
-		let unif_matrix = CsMat::<EntryType>::eye(inf_matrix.rows()) - scalar_matrix;
-		(epoch.clone(), unif_matrix)
+		// We have to do it this way since the `Sub` trait isn't implemented for sparse matrices.
+		let one = EntryType::one();
+		let epoch = self.epoch();
+		let state_count = self.len();
+		let row_cnt = self.data.len();
+		let mut rows = Vec::<usize>::with_capacity(state_count + row_cnt);
+		let mut cols = Vec::<usize>::with_capacity(state_count + row_cnt);
+		let mut values = Vec::<EntryType>::with_capacity(state_count + row_cnt);
+		for (row, col_option) in self.data.iter().enumerate() {
+			let row_sum = self.row_sum(row);
+			if let Some(col_data) = col_option {
+				for (col, value) in col_data.iter() {
+					rows.push(row);
+					cols.push(*col);
+					values.push(*value / epoch);
+				}
+			}
+			// Add the negative diagonal entry
+			if let Some(row_sum) = row_sum {
+				rows.push(row);
+				cols.push(row);
+				values.push(one - row_sum / epoch);
+			}
+		}
+		(
+			epoch,
+			CsMat::new_csc((state_count, state_count), rows, cols, values),
+		)
 	}
 }
 
@@ -299,7 +332,7 @@ where
 			None
 		} else {
 			let idx = idxes[0].0;
-			Some(self.data()[idx].clone())
+			Some(self.data()[idx])
 		}
 	}
 
