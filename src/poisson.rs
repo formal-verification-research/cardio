@@ -9,7 +9,7 @@ use crate::matrix;
 /// A bound from a Fox-Glynn computation.
 pub struct FoxGlynnBound<ValueType>
 where
-	ValueType: matrix::MatEntry
+	ValueType: matrix::CheckableNumber
 		+ Bounded
 		+ std::convert::From<f64>
 		+ std::convert::From<usize>
@@ -27,7 +27,7 @@ where
 
 impl<ValueType> Default for FoxGlynnBound<ValueType>
 where
-	ValueType: matrix::MatEntry
+	ValueType: matrix::CheckableNumber
 		+ Bounded
 		+ std::convert::From<f64>
 		+ std::convert::From<usize>
@@ -49,7 +49,7 @@ where
 
 impl<ValueType> FoxGlynnBound<ValueType>
 where
-	ValueType: matrix::MatEntry
+	ValueType: matrix::CheckableNumber
 		+ Bounded
 		+ std::convert::From<f64>
 		+ std::convert::From<usize>

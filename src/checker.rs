@@ -7,6 +7,8 @@ use num::{
 };
 use sprs::{CsMat, CsVec};
 
+use self::model::TimeBound;
+
 /// A CTMC transition matrix
 pub trait CtmcTransMat {
 	fn uniformize(rate_mat: Self) -> Self;
@@ -23,7 +25,7 @@ where
 
 pub struct CheckContext<EntryType>
 where
-	EntryType: MatEntry,
+	EntryType: CheckableNumber,
 {
 	distribution: CsVec<EntryType>,
 	uniformized_matrix: CsMat<EntryType>,
@@ -45,7 +47,7 @@ where
 
 impl<EntryType> CslChecker<EntryType>
 where
-	EntryType: MatEntry
+	EntryType: CheckableNumber
 		+ Bounded
 		+ std::convert::From<f64>
 		+ std::convert::From<usize>
@@ -84,6 +86,39 @@ where
 			}
 			// TODO: check for numerical instability
 		}
+
+		// Create the result vector
+		let mut first_iteration = fg_result.left;
+		// let mut result = if first_iteration == 0 {
+		// 	first_iteration += 1;
+		// 	let res = context.distribution.clone();
+		// 	res.
+		// } else {
+		//
+		// }
 		unimplemented!();
+	}
+
+	pub fn steady_state(&self, context: &mut CheckContext<EntryType>) -> CsVec<EntryType> {
+		unimplemented!();
+	}
+
+	pub fn compute_until(
+		&self,
+		context: &mut CheckContext<EntryType>,
+		bound: TimeBound<EntryType>,
+	) -> CsVec<EntryType> {
+		match bound {
+			TimeBound::TimeUnbounded => self.steady_state(context),
+			TimeBound::TimeBoundedUpper(upper_bound) => {
+				unimplemented!();
+			}
+			TimeBound::TimeBoundWindow(lower_bound, upper_bound) => {
+				unimplemented!();
+			}
+			TimeBound::TimeBoundedLower(lower_bound) => {
+				unimplemented!();
+			}
+		}
 	}
 }

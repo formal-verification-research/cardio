@@ -8,7 +8,7 @@ use sprs::CsMat;
 use vector_map::VecMap;
 
 /// A trait representing what we need for a matrix entry
-pub trait MatEntry:
+pub trait CheckableNumber:
 	num::Num
 	+ num::Signed
 	+ Clone
@@ -29,15 +29,15 @@ pub trait MatEntry:
 {
 }
 
-impl MatEntry for f64 {}
-impl MatEntry for f32 {}
-impl MatEntry for Rational64 {}
-impl MatEntry for Rational32 {}
+impl CheckableNumber for f64 {}
+impl CheckableNumber for f32 {}
+impl CheckableNumber for Rational64 {}
+impl CheckableNumber for Rational32 {}
 
 /// A trait that represents any type of sparse matrix construction.
 pub trait SprsMatBuilder<EntryType>
 where
-	EntryType: MatEntry,
+	EntryType: CheckableNumber,
 {
 	/// Get the value (if it exists) at row `row` and column `col`. If it does not exist, this
 	/// function will return None.
@@ -70,7 +70,7 @@ where
 /// states.
 pub struct OptimalSprsMatBuilder<EntryType>
 where
-	EntryType: MatEntry, // All we require for the entry is a numeric type
+	EntryType: CheckableNumber, // All we require for the entry is a numeric type
 {
 	/// The actual data storage. We use a `VecMap` here since most models we've encountered have
 	/// only 5-30 reactions. Therefore it will be more efficient than dealing with the overhead of
@@ -89,7 +89,7 @@ where
 
 impl<EntryType> OptimalSprsMatBuilder<EntryType>
 where
-	EntryType: MatEntry,
+	EntryType: CheckableNumber,
 {
 	/// The number of nonzero entries in the sparse matrix
 	pub fn num_entries(&self) -> usize {
@@ -152,7 +152,7 @@ where
 
 impl<EntryType> SprsMatBuilder<EntryType> for OptimalSprsMatBuilder<EntryType>
 where
-	EntryType: MatEntry,
+	EntryType: CheckableNumber,
 {
 	/// Gets the value at a particular row and column
 	fn get_value(&self, row: usize, col: usize) -> Option<EntryType> {
@@ -319,7 +319,7 @@ type ExplicitSprsMatBuilder<EntryType> = sprs::TriMat<EntryType>;
 
 impl<EntryType> SprsMatBuilder<EntryType> for ExplicitSprsMatBuilder<EntryType>
 where
-	EntryType: MatEntry,
+	EntryType: CheckableNumber,
 {
 	/// See documentation for `TriMat::add_triplet`
 	fn insert(&mut self, row: usize, col: usize, entry: EntryType) {

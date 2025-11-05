@@ -1,12 +1,28 @@
-use crate::matrix::{MatEntry, SprsMatBuilder};
+use crate::matrix::{CheckableNumber, SprsMatBuilder};
 use crate::rewards;
+
+/// An enum representing the possible time bounds that a CSL property can handle
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeBound<ValueType>
+where
+	ValueType: CheckableNumber,
+{
+	/// A time bound of the form [0, T]
+	TimeBoundedUpper(ValueType),
+	/// A time bound of the form [T, T']
+	TimeBoundWindow(ValueType, ValueType),
+	/// A time bound of the form [T, oo] (T to infinity)
+	TimeBoundedLower(ValueType),
+	/// The absence of a time bound (steady state)
+	TimeUnbounded,
+}
 
 /// The allowed types of model. Currently, there are only two options, but as Cardio expands, we
 /// may support non-determinism and thus MDPs and CTMDPs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelType<ValueType>
 where
-	ValueType: MatEntry,
+	ValueType: CheckableNumber,
 {
 	/// A Continuous-time Markov Chain (CTMC)
 	ContinuousTime(ValueType),
@@ -16,7 +32,7 @@ where
 
 trait Model<ValueType>
 where
-	ValueType: MatEntry,
+	ValueType: CheckableNumber,
 {
 	type MatrixType;
 
@@ -30,7 +46,7 @@ where
 /// An explicit model, stored in sparse format.
 pub struct SparseModel<ValueType>
 where
-	ValueType: MatEntry,
+	ValueType: CheckableNumber,
 {
 	/// The type of stochastic model.
 	mod_type: ModelType<ValueType>,
@@ -42,7 +58,7 @@ where
 
 impl<ValueType> SparseModel<ValueType>
 where
-	ValueType: MatEntry,
+	ValueType: CheckableNumber,
 {
 	/// Less efficient than it could be since the sparse matrix is cloned
 	pub fn new(mat_builder: &impl SprsMatBuilder<ValueType>, continuous_time: bool) -> Self {
@@ -87,7 +103,7 @@ where
 
 impl<ValueType> Model<ValueType> for SparseModel<ValueType>
 where
-	ValueType: MatEntry,
+	ValueType: CheckableNumber,
 {
 	type MatrixType = sprs::CsMat<ValueType>;
 
