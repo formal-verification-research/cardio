@@ -114,6 +114,13 @@ where
 				unimplemented!();
 			}
 			TimeBound::TimeBoundWindow(lower_bound, upper_bound) => {
+				// Here there are two computations. For an interval of `Phi U [T,T'] Psi` we have
+				// two probabilities:
+				// (1) Stay in states |= Phi to time t, or
+				// (2) Reaching a state |= Psi in time t' - t.
+				// On pages 26-27 of *Stochastic Model Checking* (https://doi.org/10.1007/978-3-540-72522-0_6),
+				// they note that if (2) is performed first, we can use it as an initial
+				// distributiuon for
 				unimplemented!();
 			}
 			TimeBound::TimeBoundedLower(lower_bound) => {

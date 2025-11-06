@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 use num::{Rational32, Rational64, Zero, pow::Pow};
 use sprs::CsMat;
@@ -15,6 +15,7 @@ pub trait CheckableNumber:
 	+ std::iter::Sum
 	+ std::cmp::PartialOrd
 	+ Div
+	+ DivAssign
 	+ Add
 	+ AddAssign
 	+ Mul
