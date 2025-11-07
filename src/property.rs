@@ -2,7 +2,9 @@ use std::ops;
 
 use crate::matrix::CheckableNumber;
 
-trait Property {
+/// A trait for anything we can throw in a .props, .csl, or .pctl file.
+pub trait Property {
+	fn parse(input: &str) -> Self;
 	fn is_pctl(&self) -> bool;
 }
 
@@ -18,8 +20,26 @@ where
 	TimeBoundWindow(ValueType, ValueType),
 	/// A time bound of the form [T, oo] (T to infinity)
 	TimeBoundedLower(ValueType),
+	/// A bound in the number of steps. Because PCTL only supports an upper bound on the number of
+	/// steps, the count in here is an upper bound, i.e., from [0, k] steps.
+	StepBoundUpper(usize),
 	/// The absence of a time bound (steady state)
 	TimeUnbounded,
+}
+
+impl<ValueType> ToString for Interval<ValueType>
+where
+	ValueType: CheckableNumber,
+{
+	fn to_string(&self) -> String {
+		match self {
+			Self::TimeUnbounded => "".to_string(),
+			Self::TimeBoundedUpper(ubound) => format!("[0, {ubound}]"),
+			Self::StepBoundUpper(ubound) => format!("<= {ubound}]"),
+			Self::TimeBoundedLower(lbound) => format!(">= {lbound}"),
+			Self::TimeBoundWindow(lbound, ubound) => format!("[{lbound}, {ubound}]"),
+		}
+	}
 }
 
 /// The type of transient or steady state probability query.
@@ -38,6 +58,21 @@ where
 	GreaterThan(ValueType),
 	/// A query that asks "is the probability greater than or equal to p?"
 	GreaterThanEqual(ValueType),
+}
+
+impl<ValueType> ToString for ProbabilityQueryType<ValueType>
+where
+	ValueType: CheckableNumber,
+{
+	fn to_string(&self) -> String {
+		match self {
+			Self::SimpleQuery => "=?".to_string(),
+			Self::LessThan(p) => format!("< {p}"),
+			Self::LessThanEqual(p) => format!("<= {p}"),
+			Self::GreaterThan(p) => format!("> {p}"),
+			Self::GreaterThanEqual(p) => format!(">= {p}"),
+		}
+	}
 }
 
 /// A CSL or PCTL state formula. PCTL excludes the `SteadyStateQuery` however, and tools should
@@ -105,6 +140,35 @@ where
 	}
 }
 
+impl<ValueType> ToString for StateFormula<ValueType>
+where
+	ValueType: CheckableNumber,
+{
+	fn to_string(&self) -> String {
+		match self {
+			Self::True => "true".to_string(),
+			Self::Not(subformula) => subformula.to_string(),
+			Self::AtomicProposition(ap) => ap.to_string(),
+			Self::StringLabel(label) => format!("\"{label}\""),
+			Self::Conjunction(lhs, rhs) => {
+				let lhs_str = lhs.to_string();
+				let rhs_str = rhs.to_string();
+				format!("({lhs_str}) & ({rhs_str})")
+			}
+			Self::TransientQuery(query_type, path_formula) => {
+				let qt_str = query_type.to_string();
+				let pf_str = path_formula.to_string();
+				format!("P{qt_str} [ {pf_str} ]")
+			}
+			Self::SteadyStateQuery(query_type, state_formula) => {
+				let qt_str = query_type.to_string();
+				let sf_str = state_formula.to_string();
+				format!("S{qt_str} [ {sf_str} ]")
+			}
+		}
+	}
+}
+
 impl<ValueType> Property for StateFormula<ValueType>
 where
 	ValueType: CheckableNumber,
@@ -117,6 +181,10 @@ where
 			Self::TransientQuery(_, pf) => pf.is_pctl(),
 			Self::SteadyStateQuery(_, _) => false,
 		}
+	}
+
+	fn parse(input: &str) -> Self {
+		unimplemented!();
 	}
 }
 
@@ -219,12 +287,33 @@ where
 	fn is_pctl(&self) -> bool {
 		match self {
 			Self::Next(sf) => sf.is_pctl(),
+			Self::Until(phi, interval, psi) => match interval {
+				Interval::StepBoundUpper(_bound) => phi.is_pctl() && psi.is_pctl(),
+				_ => false,
+			},
+		}
+	}
+
+	fn parse(input: &str) -> Self {
+		unimplemented!();
+	}
+}
+
+impl<ValueType> ToString for PathFormula<ValueType>
+where
+	ValueType: CheckableNumber,
+{
+	fn to_string(&self) -> String {
+		match self {
+			Self::Next(sf) => {
+				let sf_str = sf.to_string();
+				format!("X {sf_str}")
+			}
 			Self::Until(phi, interval, psi) => {
-				match interval {
-					// TODO: for PCTL should the bound be an integer type?
-					Interval::TimeBoundedUpper(_bound) => phi.is_pctl() && psi.is_pctl(),
-					_ => false,
-				}
+				let phi_str = phi.to_string();
+				let i_str = interval.to_string();
+				let psi_str = psi.to_string();
+				format!("{phi_str} U{i_str} {psi_str}")
 			}
 		}
 	}

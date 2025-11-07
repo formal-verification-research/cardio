@@ -24,6 +24,7 @@ pub trait CheckableNumber:
 	+ SubAssign
 	+ Zero
 	+ Pow<i32, Output = Self>
+	+ std::fmt::Display
 {
 }
 
