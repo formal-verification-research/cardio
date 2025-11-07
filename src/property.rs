@@ -216,8 +216,8 @@ where
 						let phi_lower = *phi.clone() & !abs.clone();
 						let phi_upper = *phi.clone() | abs.clone();
 						(
-							PathFormula::<ValueType>::Next(Box::new(phi_lower)),
-							PathFormula::<ValueType>::Next(Box::new(phi_upper)),
+							PathFormula::<ValueType>::next(&phi_lower),
+							PathFormula::<ValueType>::next(&phi_upper),
 						)
 					}
 					PathFormula::Until(phi, interval, psi) => {
@@ -230,16 +230,17 @@ where
 						let psi_lower = *psi.clone() & !abs.clone();
 						let psi_upper = *psi.clone() | abs.clone();
 						(
-							PathFormula::<ValueType>::Until(
-								Box::new(phi_lower),
-								*interval,
-								Box::new(psi_lower),
-							),
-							PathFormula::<ValueType>::Until(
-								Box::new(phi_upper),
-								*interval,
-								Box::new(psi_upper),
-							),
+							PathFormula::<ValueType>::until(&phi_lower, *interval, &psi_lower),
+							PathFormula::<ValueType>::until(&phi_upper, *interval, &psi_upper),
+						)
+					}
+					PathFormula::Globally(phi) => {
+						// This works the same as next
+						let phi_lower = *phi.clone() & !abs.clone();
+						let phi_upper = *phi.clone() | abs.clone();
+						(
+							PathFormula::<ValueType>::globally(&phi_lower),
+							PathFormula::<ValueType>::globally(&phi_upper),
 						)
 					}
 				};
@@ -278,6 +279,8 @@ where
 		Interval<ValueType>,
 		Box<StateFormula<ValueType>>,
 	),
+	/// A state formula holds on an entire path.
+	Globally(Box<StateFormula<ValueType>>),
 }
 
 impl<ValueType> Property for PathFormula<ValueType>
@@ -286,7 +289,7 @@ where
 {
 	fn is_pctl(&self) -> bool {
 		match self {
-			Self::Next(sf) => sf.is_pctl(),
+			Self::Next(sf) | Self::Globally(sf) => sf.is_pctl(),
 			Self::Until(phi, interval, psi) => match interval {
 				Interval::StepBoundUpper(_bound) => phi.is_pctl() && psi.is_pctl(),
 				_ => false,
@@ -315,6 +318,47 @@ where
 				let psi_str = psi.to_string();
 				format!("{phi_str} U{i_str} {psi_str}")
 			}
+			Self::Globally(sf) => {
+				let sf_str = sf.to_string();
+				format!("G {sf_str}")
+			}
 		}
 	}
+}
+
+impl<ValueType> PathFormula<ValueType>
+where
+	ValueType: CheckableNumber,
+{
+	/// Creates a state formula of type `next`
+	pub fn next(state_formula: &StateFormula<ValueType>) -> Self {
+		Self::Next(Box::new(state_formula.clone()))
+	}
+
+	/// Creates a state formula of type `until`
+	pub fn until(
+		phi: &StateFormula<ValueType>,
+		interval: Interval<ValueType>,
+		psi: &StateFormula<ValueType>,
+	) -> Self {
+		Self::Until(Box::new(phi.clone()), interval, Box::new(psi.clone()))
+	}
+
+	pub fn globally(state_formula: &StateFormula<ValueType>) -> Self {
+		Self::Globally(Box::new(state_formula.clone()))
+	}
+
+	/// Creates an "eventually" state formula, which is equivalently "true U psi"
+	pub fn eventually(
+		interval: Interval<ValueType>,
+		state_formula: &StateFormula<ValueType>,
+	) -> Self {
+		Self::Until(
+			Box::new(StateFormula::<ValueType>::True),
+			interval,
+			Box::new(state_formula.clone()),
+		)
+	}
+
+	// TODO: Weak until and release.
 }
