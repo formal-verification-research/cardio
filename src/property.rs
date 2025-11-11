@@ -13,6 +13,98 @@ pub trait Property {
 	fn is_pctl(&self) -> bool;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryApOperator {
+	Plus,
+	Minus,
+	Multipy,
+	// We don't support divide since this is over integers
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComparisonOperator {
+	Eq,
+	GreaterEq,
+	LessEq,
+	Greater,
+	Less,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum VariableType {
+	BitIndecies(usize, usize),
+	Name(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AtomicExpression {
+	Value(i64),
+	Variable(VariableType),
+	BinaryOperator(
+		BinaryApOperator,
+		Box<AtomicExpression>,
+		Box<AtomicExpression>,
+	),
+}
+
+impl AtomicExpression {
+	pub fn evaluate_value(&self) -> Option<i64> {
+		match self {
+			Self::Value(val) => Some(*val),
+			Self::Variable(_) => None,
+			Self::BinaryOperator(op, lhs, rhs) => {
+				let lhs_val = lhs.evaluate_value()?;
+				let rhs_val = rhs.evaluate_value()?;
+				let res = match op {
+					BinaryApOperator::Plus => lhs_val + rhs_val,
+					BinaryApOperator::Minus => lhs_val + rhs_val,
+					BinaryApOperator::Multipy => lhs_val * rhs_val,
+				};
+				Some(res)
+			}
+		}
+	}
+
+	pub fn simplify(&self) -> Self {
+		match self {
+			// If a variable or a value, we can't simplify
+			Self::Value(_) | Self::Variable(_) => self.clone(),
+			// Here we can try to simplify it
+			Self::BinaryOperator(op, lhs, rhs) => {
+				unimplemented!()
+			}
+		}
+	}
+}
+
+impl ToString for AtomicExpression {
+	fn to_string(&self) -> String {
+		match self {
+			Self::Value(val) => format!("{val}"),
+			Self::Variable(var_type) => match var_type {
+				VariableType::Name(name) => name.clone(),
+				VariableType::BitIndecies(lower, upper) => format!("bv[{lower}, {upper}]"),
+			},
+			Self::BinaryOperator(op, lhs, rhs) => {
+				let lhs_str = lhs.to_string();
+				let rhs_str = rhs.to_string();
+				match op {
+					BinaryApOperator::Plus => format!("({lhs_str} + {rhs_str})"),
+					BinaryApOperator::Minus => format!("({lhs_str} - {rhs_str})"),
+					BinaryApOperator::Multipy => format!("{lhs_str} * {rhs_str}"),
+				}
+			}
+		}
+	}
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AtomicProposition {
+	lhs: Box<AtomicExpression>,
+	operator: ComparisonOperator,
+	rhs: Box<AtomicExpression>,
+}
+
 /// An enum representing the possible time bounds that a CSL property can handle
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Interval<ValueType>
@@ -409,71 +501,82 @@ where
 pub enum Token {
 	#[regex(r"true")]
 	True,
+	#[regex(r"false")]
+	False,
+	#[regex(r"[0-9]+", |lex| lex.slice().parse::<i64>().unwrap())]
+	Integer(i64),
+	#[regex(r"[0-9]+\.[0-9]*", |lex| lex.slice().parse::<f64>().unwrap())]
+	Float(f64),
+	#[token("+")]
+	Plus,
+	#[token("-")]
+	Minus,
+	#[token("*")]
+	Multiply,
 
+	// Comparison operators
+	#[token("==")]
+	/// Strict equality
+	Equal,
+	/// Not equal (inverse of strict equality)
+	#[token("!=")]
+	NotEqual,
+	/// Strict less than
+	#[token("<")]
+	LessThan,
+	/// Strict greater than
+	#[token(">")]
+	GreaterThan,
+	/// Less than or equal
+	#[token("<=")]
+	LessThanOrEqual,
+	/// Greater than or equal
+	#[token(">=")]
+	GreaterThanOrEqual,
+	/// Query operator. Not strictly a comparison operator but very similar.
+	#[token("=?")]
+	ValueQuery,
+
+	// String label
 	#[regex(r#""([^"]*)""#, |lex| lex.slice().to_string())]
 	StringLabel(String),
 
+	// Boolean (state-formula) tokens
 	#[token("!")]
 	Not,
-
 	#[token("&")]
 	And,
-
 	#[token("|")]
 	Or,
 
+	// Parenthesis and bracket tokens
 	#[token("(")]
 	LParen,
-
 	#[token(")")]
 	RParen,
-
 	#[token("[")]
 	LBracket,
-
 	#[token("]")]
 	RBracket,
 
 	// probability query operators
-	#[token("P=?")]
-	ProbabilityFind,
-
-	#[token("P>=")]
-	ProbabilityGEQ,
-
-	#[token("P>")]
-	ProbabilityGreater,
-
-	#[token("P<=")]
-	ProbabilityLEQ,
-
-	#[token("P<")]
-	ProbabilityLess,
-
-	// probability query operators
-	#[token("S=?")]
-	SteadyStateFind,
-
-	#[token("S>=")]
-	SteadyStateGEQ,
-
-	#[token("S>")]
-	SteadyStateGreater,
-
-	#[token("S<=")]
-	SteadyStateLEQ,
-
-	#[token("S<")]
-	SteadyStateLess,
+	#[token("P")]
+	///A transient probability query
+	ProbabilityQuery,
+	// steady state query operators
+	#[token("S")]
+	/// A steady state probability query
+	SteadyStateQuery,
 
 	// path formula operators
 	#[token("G")]
+	/// The state formula holds everywhere
 	Globally,
-
 	#[token("X")]
+	/// The state formula holds in the next state
 	Next,
-
 	#[token("U")]
+	/// A state formula holds until another state formula takes over
 	Until,
 }
 
@@ -488,19 +591,11 @@ pub fn lex(input: &str) -> Vec<Token> {
 	tokens
 }
 
-pub fn parse_state_formula<ValueType>(tokens: &[Token]) -> Result<StateFormula<ValueType>, String>
-where
-	ValueType: CheckableNumber,
-{
-	let mut iter = tokens.iter().peekable();
-	parse_expression(&mut iter)
-}
-
 fn parse_interval<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<Interval<ValueType>, String>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 	I: Iterator<Item = &'a Token>,
 {
 	unimplemented!();
@@ -511,30 +606,23 @@ fn parse_expression<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<StateFormula<ValueType>, String>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 	I: Iterator<Item = &'a Token>,
 {
-	let mut left = parse_primary(iter)?;
+	let mut left = parse_state_formula(iter)?;
 
 	while let Some(&token) = iter.peek() {
 		match token {
 			Token::And => {
 				iter.next(); // Consume the `&`
-				let right = parse_primary(iter)?;
+				let right = parse_state_formula(iter)?;
 				left = left & right;
 			}
 			Token::Or => {
 				iter.next(); // Consume the `&`
 				// Can use it via De Morgan's Laws via negations
-				let right = parse_primary(iter)?;
+				let right = parse_state_formula(iter)?;
 				left = left | right;
-			}
-			Token::Until => {
-				iter.next();
-				let interval: Interval<ValueType> = parse_interval(iter)?;
-				let right: StateFormula<ValueType> = parse_primary(iter)?;
-				// left = StateFormula::<ValueType>::
-				todo!();
 			}
 			_ => break, // Any other token means the end of this expression
 		}
@@ -543,18 +631,18 @@ where
 	Ok(left)
 }
 
-fn parse_primary<'a, ValueType, I>(
+fn parse_state_formula<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<StateFormula<ValueType>, String>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 	I: Iterator<Item = &'a Token>,
 {
 	match iter.next() {
 		Some(Token::True) => Ok(StateFormula::True),
 		Some(Token::StringLabel(label)) => Ok(StateFormula::StringLabel(label.to_string())),
 		Some(Token::Not) => {
-			let inner = parse_primary(iter)?;
+			let inner = parse_state_formula(iter)?;
 			Ok(StateFormula::Not(Box::new(inner)))
 		}
 		Some(Token::LBracket) => {
@@ -573,11 +661,90 @@ where
 				Err("Expected closing parenthesis".to_string())
 			}
 		}
+		Some(Token::ProbabilityQuery) => {
+			// Next token must be a comparison operator
+			let comparison_token = iter.next();
+			match comparison_token {
+				Some(Token::ValueQuery) => {
+					let path_formula = parse_path_formula(iter)?;
+					Ok(StateFormula::TransientQuery(
+						ProbabilityQueryType::<ValueType>::SimpleQuery,
+						Box::new(path_formula),
+					))
+				}
+				Some(Token::LessThan)
+				| Some(Token::GreaterThan)
+				| Some(Token::GreaterThanOrEqual)
+				| Some(Token::LessThanOrEqual)
+				| Some(Token::Equal)
+				| Some(Token::NotEqual) => {
+					// Next token must be a float
+					let bound_token = iter.next();
+					if let Some(Token::Float(bound)) = bound_token {
+						match comparison_token {
+							Some(Token::LessThan) => {
+								let path_formula = parse_path_formula(iter)?;
+								Ok(StateFormula::TransientQuery(
+									ProbabilityQueryType::<ValueType>::LessThan((*bound).into()),
+									Box::new(path_formula),
+								))
+							}
+							Some(Token::GreaterThan) => {
+								let path_formula = parse_path_formula(iter)?;
+								Ok(StateFormula::TransientQuery(
+									ProbabilityQueryType::<ValueType>::GreaterThan((*bound).into()),
+									Box::new(path_formula),
+								))
+							}
+							Some(Token::LessThanOrEqual) => {
+								let path_formula = parse_path_formula(iter)?;
+								Ok(StateFormula::TransientQuery(
+									ProbabilityQueryType::<ValueType>::LessThanEqual(
+										(*bound).into(),
+									),
+									Box::new(path_formula),
+								))
+							}
+							Some(Token::GreaterThanOrEqual) => {
+								let path_formula = parse_path_formula(iter)?;
+								Ok(StateFormula::TransientQuery(
+									ProbabilityQueryType::<ValueType>::GreaterThanEqual(
+										(*bound).into(),
+									),
+									Box::new(path_formula),
+								))
+							}
+							Some(Token::Equal) => {
+								Err("Strict equality not supported in transient queries!"
+									.to_string())
+							}
+							Some(Token::NotEqual) => {
+								Err("Inequality not supported in transient queries!".to_string())
+							}
+							_ => Err("Expected a comparison or value query token!".to_string()),
+						}
+					} else {
+						Err("Must have probability bound unless query type is `=?`!".to_string())
+					}
+				}
+				_ => Err("Expected comparison token".to_string()),
+			}
+		}
 		None | Some(Token::RBracket) | Some(Token::RParen) => {
 			Err("Unexpected end of input".to_string())
 		}
-		_ => parse_primary(iter),
+		_ => parse_state_formula(iter),
 	}
+}
+
+fn parse_path_formula<'a, ValueType, I>(
+	iter: &mut std::iter::Peekable<I>,
+) -> Result<PathFormula<ValueType>, String>
+where
+	ValueType: CheckableNumber + std::convert::From<f64>,
+	I: Iterator<Item = &'a Token>,
+{
+	unimplemented!();
 }
 
 #[cfg(test)]
