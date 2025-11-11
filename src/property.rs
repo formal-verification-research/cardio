@@ -681,6 +681,10 @@ where
 					// Next token must be a float
 					let bound_token = iter.next();
 					if let Some(Token::Float(bound)) = bound_token {
+						// A little validation goes a long way
+						if *bound < 0.0 || *bound > 1.0 {
+							return Err("Probability bound for transient query must be between zero and one!".to_string());
+						}
 						match comparison_token {
 							Some(Token::LessThan) => {
 								let path_formula = parse_path_formula(iter)?;
@@ -753,6 +757,10 @@ where
 					// Next token must be a float
 					let bound_token = iter.next();
 					if let Some(Token::Float(bound)) = bound_token {
+						// Again, a little validation goes a long way
+						if *bound < 0.0 || *bound > 1.0 {
+							return Err("Probability bound for steady state query must be between zero and one!".to_string());
+						}
 						match comparison_token {
 							Some(Token::LessThan) => {
 								let state_formula = parse_state_formula(iter)?;
