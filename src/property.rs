@@ -730,6 +730,78 @@ where
 				_ => Err("Expected comparison token".to_string()),
 			}
 		}
+		// While this case is very similar to the previous, a steady state query takes a state
+		// formula afterward, whereas the transient query takes a path formula. Thus, it appears to
+		// me that unfortunately the near-duplication can't be avoided.
+		Some(Token::SteadyStateQuery) => {
+			// Next token must be a comparison operator
+			let comparison_token = iter.next();
+			match comparison_token {
+				Some(Token::ValueQuery) => {
+					let state_formula = parse_state_formula(iter)?;
+					Ok(StateFormula::SteadyStateQuery(
+						ProbabilityQueryType::<ValueType>::SimpleQuery,
+						Box::new(state_formula),
+					))
+				}
+				Some(Token::LessThan)
+				| Some(Token::GreaterThan)
+				| Some(Token::GreaterThanOrEqual)
+				| Some(Token::LessThanOrEqual)
+				| Some(Token::Equal)
+				| Some(Token::NotEqual) => {
+					// Next token must be a float
+					let bound_token = iter.next();
+					if let Some(Token::Float(bound)) = bound_token {
+						match comparison_token {
+							Some(Token::LessThan) => {
+								let state_formula = parse_state_formula(iter)?;
+								Ok(StateFormula::SteadyStateQuery(
+									ProbabilityQueryType::<ValueType>::LessThan((*bound).into()),
+									Box::new(state_formula),
+								))
+							}
+							Some(Token::GreaterThan) => {
+								let state_formula = parse_state_formula(iter)?;
+								Ok(StateFormula::SteadyStateQuery(
+									ProbabilityQueryType::<ValueType>::GreaterThan((*bound).into()),
+									Box::new(state_formula),
+								))
+							}
+							Some(Token::LessThanOrEqual) => {
+								let state_formula = parse_state_formula(iter)?;
+								Ok(StateFormula::SteadyStateQuery(
+									ProbabilityQueryType::<ValueType>::LessThanEqual(
+										(*bound).into(),
+									),
+									Box::new(state_formula),
+								))
+							}
+							Some(Token::GreaterThanOrEqual) => {
+								let state_formula = parse_state_formula(iter)?;
+								Ok(StateFormula::SteadyStateQuery(
+									ProbabilityQueryType::<ValueType>::GreaterThanEqual(
+										(*bound).into(),
+									),
+									Box::new(state_formula),
+								))
+							}
+							Some(Token::Equal) => {
+								Err("Strict equality not supported in transient queries!"
+									.to_string())
+							}
+							Some(Token::NotEqual) => {
+								Err("Inequality not supported in transient queries!".to_string())
+							}
+							_ => Err("Expected a comparison or value query token!".to_string()),
+						}
+					} else {
+						Err("Must have probability bound unless query type is `=?`!".to_string())
+					}
+				}
+				_ => Err("Expected comparison token".to_string()),
+			}
+		}
 		None | Some(Token::RBracket) | Some(Token::RParen) => {
 			Err("Unexpected end of input".to_string())
 		}
