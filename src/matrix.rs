@@ -363,7 +363,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+mod matrix_tests {
 	use num::ToPrimitive;
 
 	use super::*;

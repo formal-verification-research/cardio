@@ -1,10 +1,15 @@
 use std::ops;
 
+use logos::Logos;
+use regex::Regex;
+
 use crate::matrix::CheckableNumber;
 
 /// A trait for anything we can throw in a .props, .csl, or .pctl file.
 pub trait Property {
-	fn parse(input: &str) -> Self;
+	fn parse(input: &str) -> Result<Self, String>
+	where
+		Self: Sized;
 	fn is_pctl(&self) -> bool;
 }
 
@@ -183,7 +188,13 @@ where
 		}
 	}
 
-	fn parse(input: &str) -> Self {
+	fn parse(input: &str) -> Result<Self, String> {
+		if input == "true" {
+			return Ok(StateFormula::True);
+		} else if input == "false" {
+			let tr = Self::True;
+			return Ok(!tr);
+		}
 		unimplemented!();
 	}
 }
@@ -259,8 +270,12 @@ where
 				))
 			}
 			// Currently we cover all options, but this allows us to easily add some.
-			_ => None,
+			// _ => None,
 		}
+	}
+
+	pub fn absorbing() -> Self {
+		Self::StringLabel("absorbing".to_string())
 	}
 }
 
@@ -297,7 +312,35 @@ where
 		}
 	}
 
-	fn parse(input: &str) -> Self {
+	fn parse(input: &str) -> Result<Self, String> {
+		let re = Regex::new(r#"(?P<true>true)|(?P<label>"[^"]*")|(?P<not>!)|(?P<and>\&)|(?P<or>\|)|(?P<lparen>$)|(?P<rparen>$)"#)
+			.unwrap();
+
+		let mut tokens: Vec<&str> = Vec::new();
+
+		for cap in re.captures_iter(input) {
+			if let Some(_) = cap.name("true") {
+				tokens.push("true");
+			} else if let Some(label) = cap.name("label") {
+				tokens.push(label.as_str());
+			} else if let Some(_) = cap.name("not") {
+				tokens.push("!");
+			} else if let Some(_) = cap.name("and") {
+				tokens.push("&");
+			} else if let Some(_) = cap.name("or") {
+				tokens.push("|");
+			} else if let Some(_) = cap.name("lparen") {
+				tokens.push("(");
+			} else if let Some(_) = cap.name("rparen") {
+				tokens.push(")");
+			}
+		}
+
+		// Token processing logic based on the vector 'tokens' would go here.
+		// This involves building your StateFormula recursively based on the parsed tokens.
+
+		// Err("Parsing failed.".to_string())
+
 		unimplemented!();
 	}
 }
@@ -361,4 +404,139 @@ where
 	}
 
 	// TODO: Weak until and release.
+}
+
+#[derive(Logos, Debug, PartialEq, Clone)]
+pub enum Token {
+	#[regex(r"true")]
+	True,
+
+	#[regex(r#""([^"]*)""#, |lex| lex.slice().to_string())]
+	StringLabel(String),
+
+	#[token("!")]
+	Not,
+
+	#[token("&")]
+	And,
+
+	#[token("|")]
+	Or,
+
+	#[token("(")]
+	LParen,
+
+	#[token(")")]
+	RParen,
+
+	#[token("[")]
+	LBracket,
+
+	#[token("]")]
+	RBracket,
+}
+
+pub fn lex(input: &str) -> Vec<Token> {
+	let mut lexer = Token::lexer(input);
+	let mut tokens = Vec::new();
+
+	while let Some(Ok(token)) = lexer.next() {
+		tokens.push(token);
+	}
+
+	tokens
+}
+
+pub fn parse_state_formula<ValueType>(tokens: &[Token]) -> Result<StateFormula<ValueType>, String>
+	where
+	ValueType: CheckableNumber,
+{
+	let mut iter = tokens.iter().peekable();
+	parse_expression(&mut iter)
+}
+
+fn parse_expression<'a, ValueType, I>(iter: &mut std::iter::Peekable<I>) -> Result<StateFormula<ValueType>, String>
+where
+	ValueType: CheckableNumber,
+	I: Iterator<Item = &'a Token>,
+{
+	let mut left = parse_primary(iter)?;
+
+	while let Some(&token) = iter.peek() {
+		match token {
+			Token::And => {
+				iter.next(); // Consume the `&`
+				let right = parse_primary(iter)?;
+				left = left & right;
+			}
+			Token::Or => {
+				iter.next(); // Consume the `&`
+				// Can use it via De Morgan's Laws via negations
+				let right = parse_primary(iter)?;
+				left = left | right;
+			}
+			_ => break, // Any other token means the end of this expression
+		}
+	}
+
+	Ok(left)
+}
+
+fn parse_primary<'a, ValueType, I>(iter: &mut std::iter::Peekable<I>) -> Result<StateFormula<ValueType>, String>
+where
+	ValueType: CheckableNumber,
+	I: Iterator<Item = &'a Token>,
+{
+	match iter.next() {
+		Some(Token::True) => Ok(StateFormula::True),
+		Some(Token::StringLabel(label)) => Ok(StateFormula::StringLabel(label.to_string())),
+		Some(Token::Not) => {
+			let inner = parse_primary(iter)?;
+			Ok(StateFormula::Not(Box::new(inner)))
+		}
+		Some(Token::LBracket) => {
+			let expr = parse_expression(iter)?;
+			if let Some(Token::RBracket) = iter.next() {
+				Ok(expr)
+			} else {
+				Err("Expected closing brackets".to_string())
+			}
+		}
+		Some(Token::LParen) => {
+			let expr = parse_expression(iter)?;
+			if let Some(Token::RParen) = iter.next() {
+				Ok(expr)
+			} else {
+				Err("Expected closing parenthesis".to_string())
+			}
+		}
+		None | Some(Token::RBracket) | Some(Token::RParen) => {
+			Err("Unexpected end of input".to_string())
+		}
+		_ => parse_primary(iter),
+	}
+}
+
+#[cfg(test)]
+mod property_tests {
+	use super::{Interval, PathFormula, StateFormula};
+
+	#[test]
+	fn construction_test() {
+		let phi: StateFormula<f64> = StateFormula::absorbing();
+		let neg_phi = !phi.clone();
+		let eventually_abs: PathFormula<f64> =
+			PathFormula::eventually(Interval::<_>::TimeUnbounded, &phi);
+		let globally_not_abs: PathFormula<f64> = PathFormula::globally(&neg_phi);
+		println!("Property 1: {}", phi.to_string());
+		println!("Property 2: {}", neg_phi.to_string());
+		println!("Property 3: {}", eventually_abs.to_string());
+		println!("Property 4: {}", globally_not_abs.to_string());
+	}
+
+	#[test]
+	fn negation_test() {
+		// let phi: StateFormula<f64> = StateFormula::AtomicProposition(evalexpr::)
+		unimplemented!();
+	}
 }
