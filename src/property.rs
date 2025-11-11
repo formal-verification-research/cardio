@@ -268,9 +268,8 @@ where
 					Self::SteadyStateQuery(*query_type, Box::new(lower_bound)),
 					Self::SteadyStateQuery(*query_type, Box::new(upper_bound)),
 				))
-			}
-			// Currently we cover all options, but this allows us to easily add some.
-			// _ => None,
+			} // Currently we cover all options, but this allows us to easily add some.
+			  // _ => None,
 		}
 	}
 
@@ -434,6 +433,48 @@ pub enum Token {
 
 	#[token("]")]
 	RBracket,
+
+	// probability query operators
+	#[token("P=?")]
+	ProbabilityFind,
+
+	#[token("P>=")]
+	ProbabilityGEQ,
+
+	#[token("P>")]
+	ProbabilityGreater,
+
+	#[token("P<=")]
+	ProbabilityLEQ,
+
+	#[token("P<")]
+	ProbabilityLess,
+
+	// probability query operators
+	#[token("S=?")]
+	SteadyStateFind,
+
+	#[token("S>=")]
+	SteadyStateGEQ,
+
+	#[token("S>")]
+	SteadyStateGreater,
+
+	#[token("S<=")]
+	SteadyStateLEQ,
+
+	#[token("S<")]
+	SteadyStateLess,
+
+	// path formula operators
+	#[token("G")]
+	Globally,
+
+	#[token("X")]
+	Next,
+
+	#[token("U")]
+	Until,
 }
 
 pub fn lex(input: &str) -> Vec<Token> {
@@ -448,14 +489,27 @@ pub fn lex(input: &str) -> Vec<Token> {
 }
 
 pub fn parse_state_formula<ValueType>(tokens: &[Token]) -> Result<StateFormula<ValueType>, String>
-	where
+where
 	ValueType: CheckableNumber,
 {
 	let mut iter = tokens.iter().peekable();
 	parse_expression(&mut iter)
 }
 
-fn parse_expression<'a, ValueType, I>(iter: &mut std::iter::Peekable<I>) -> Result<StateFormula<ValueType>, String>
+fn parse_interval<'a, ValueType, I>(
+	iter: &mut std::iter::Peekable<I>,
+) -> Result<Interval<ValueType>, String>
+where
+	ValueType: CheckableNumber,
+	I: Iterator<Item = &'a Token>,
+{
+	unimplemented!();
+}
+
+/// Parses binary operators
+fn parse_expression<'a, ValueType, I>(
+	iter: &mut std::iter::Peekable<I>,
+) -> Result<StateFormula<ValueType>, String>
 where
 	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
@@ -475,6 +529,13 @@ where
 				let right = parse_primary(iter)?;
 				left = left | right;
 			}
+			Token::Until => {
+				iter.next();
+				let interval: Interval<ValueType> = parse_interval(iter)?;
+				let right: StateFormula<ValueType> = parse_primary(iter)?;
+				// left = StateFormula::<ValueType>::
+				todo!();
+			}
 			_ => break, // Any other token means the end of this expression
 		}
 	}
@@ -482,7 +543,9 @@ where
 	Ok(left)
 }
 
-fn parse_primary<'a, ValueType, I>(iter: &mut std::iter::Peekable<I>) -> Result<StateFormula<ValueType>, String>
+fn parse_primary<'a, ValueType, I>(
+	iter: &mut std::iter::Peekable<I>,
+) -> Result<StateFormula<ValueType>, String>
 where
 	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
