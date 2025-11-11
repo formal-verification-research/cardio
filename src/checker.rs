@@ -1,10 +1,7 @@
 use crate::matrix::*;
 use crate::poisson::FoxGlynnBound;
 use crate::*;
-use num::{
-	Zero,
-	traits::{Bounded, real::Real},
-};
+use num::traits::{Bounded, real::Real};
 use sprs::{CsMat, CsVec};
 
 use self::model::TimeBound;
