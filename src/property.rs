@@ -105,11 +105,25 @@ pub struct AtomicProposition {
 	rhs: Box<AtomicExpression>,
 }
 
+impl Property for AtomicProposition {
+	fn is_pctl(&self) -> bool {
+	    // All atomic propositions on states can be checked in CSL
+		true
+	}
+
+	fn parse(input: &str) -> Result<Self, String>
+		where
+			Self: Sized {
+	    let tokens = lex(input);
+		unimplemented!();
+	}
+}
+
 /// An enum representing the possible time bounds that a CSL property can handle
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Interval<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	/// A time bound of the form [0, T]
 	TimeBoundedUpper(ValueType),
@@ -126,7 +140,7 @@ where
 
 impl<ValueType> ToString for Interval<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -143,7 +157,7 @@ where
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ProbabilityQueryType<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	/// A simple query that asks the probability
 	SimpleQuery,
@@ -159,7 +173,7 @@ where
 
 impl<ValueType> ToString for ProbabilityQueryType<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -177,7 +191,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub enum StateFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	/// Evaluates to `true` on all states
 	True,
@@ -202,7 +216,7 @@ where
 
 impl<ValueType> ops::Not for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	type Output = Self;
 
@@ -217,7 +231,7 @@ where
 
 impl<ValueType> ops::BitAnd for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	type Output = Self;
 	fn bitand(self, rhs: Self) -> Self::Output {
@@ -227,7 +241,7 @@ where
 
 impl<ValueType> ops::BitOr for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	type Output = Self;
 	fn bitor(self, rhs: Self) -> Self::Output {
@@ -239,7 +253,7 @@ where
 
 impl<ValueType> ToString for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -268,7 +282,7 @@ where
 
 impl<ValueType> Property for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	fn is_pctl(&self) -> bool {
 		match self {
@@ -281,19 +295,14 @@ where
 	}
 
 	fn parse(input: &str) -> Result<Self, String> {
-		if input == "true" {
-			return Ok(StateFormula::True);
-		} else if input == "false" {
-			let tr = Self::True;
-			return Ok(!tr);
-		}
-		unimplemented!();
+		let tokens = lex(input);
+		parse_state_formula(&mut tokens.iter().peekable())
 	}
 }
 
 impl<ValueType> StateFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	/// Creates lower and upper bound properties, useful for STAMINA.
 	pub fn create_bounds(&self) -> Option<(Self, Self)> {
@@ -375,7 +384,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	/// If the state formula holds in the next state.
 	Next(Box<StateFormula<ValueType>>),
@@ -391,7 +400,7 @@ where
 
 impl<ValueType> Property for PathFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	fn is_pctl(&self) -> bool {
 		match self {
@@ -404,41 +413,14 @@ where
 	}
 
 	fn parse(input: &str) -> Result<Self, String> {
-		let re = Regex::new(r#"(?P<true>true)|(?P<label>"[^"]*")|(?P<not>!)|(?P<and>\&)|(?P<or>\|)|(?P<lparen>$)|(?P<rparen>$)"#)
-			.unwrap();
-
-		let mut tokens: Vec<&str> = Vec::new();
-
-		for cap in re.captures_iter(input) {
-			if let Some(_) = cap.name("true") {
-				tokens.push("true");
-			} else if let Some(label) = cap.name("label") {
-				tokens.push(label.as_str());
-			} else if let Some(_) = cap.name("not") {
-				tokens.push("!");
-			} else if let Some(_) = cap.name("and") {
-				tokens.push("&");
-			} else if let Some(_) = cap.name("or") {
-				tokens.push("|");
-			} else if let Some(_) = cap.name("lparen") {
-				tokens.push("(");
-			} else if let Some(_) = cap.name("rparen") {
-				tokens.push(")");
-			}
-		}
-
-		// Token processing logic based on the vector 'tokens' would go here.
-		// This involves building your StateFormula recursively based on the parsed tokens.
-
-		// Err("Parsing failed.".to_string())
-
-		unimplemented!();
+		let tokens = lex(input);
+		parse_path_formula(&mut tokens.iter().peekable())
 	}
 }
 
 impl<ValueType> ToString for PathFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -462,7 +444,7 @@ where
 
 impl<ValueType> PathFormula<ValueType>
 where
-	ValueType: CheckableNumber,
+	ValueType: CheckableNumber + std::convert::From<f64>,
 {
 	/// Creates a state formula of type `next`
 	pub fn next(state_formula: &StateFormula<ValueType>) -> Self {

@@ -9,6 +9,8 @@ pub struct Labels {
 }
 
 impl Default for Labels {
+	/// Default label structure is not constructed, thus the `state_labelling` field is empty. You
+	/// must first create the state labelling.
 	fn default() -> Self {
 		Self {
 			label_names: Vec::new(),
@@ -18,10 +20,24 @@ impl Default for Labels {
 }
 
 impl Labels {
+	/// Creates a labelling structure with an absorbing label already created and assigned to the
+	/// state at index zero, assuming that the artificial absorbing state as used by e.g., STAMINA
+	/// is stored at index zero.
+	pub fn with_absorbing() -> Self {
+		let mut labelling = Self {
+			label_names: vec![("absorbing".to_string(), 0)],
+			state_labelling: Some(Vec::new()),
+		};
+		labelling.add_label_to_state(0, 0);
+		labelling
+	}
+
+	/// Returns the number of labels in the labelling
 	pub fn label_count(&self) -> usize {
 		self.label_names.len()
 	}
 
+	/// Gets the index for a label given its name. If the name does not exist, returns `None`.
 	pub fn label_to_index(&self, label_name: &str) -> Option<usize> {
 		for (lindex, label) in self.label_names.iter().enumerate() {
 			if label.0 == label_name {
@@ -30,7 +46,8 @@ impl Labels {
 		}
 		None
 	}
-
+	
+	/// Gets the name of a label given its index. If the index is out of range, returns `None`.
 	pub fn index_to_label(&self, label_index: usize) -> Option<String> {
 		if self.label_names.len() >= label_index {
 			None
@@ -49,6 +66,7 @@ impl Labels {
 		}
 	}
 
+	/// Adds a label to a state given the state's index.
 	pub fn add_label_to_state(&mut self, label_index: usize, state_index: usize) {
 		let label_count = self.label_count();
 		assert!(label_index < label_count);
