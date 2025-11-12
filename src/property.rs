@@ -541,6 +541,10 @@ pub enum Token {
 	#[token("]")]
 	RBracket,
 
+	/// The comma token only appears in intervals
+	#[token(",")]
+	Comma,
+
 	// probability query operators
 	#[token("P")]
 	///A transient probability query
@@ -577,10 +581,77 @@ fn parse_interval<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<Interval<ValueType>, String>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 	I: Iterator<Item = &'a Token>,
 {
-	unimplemented!();
+	let first_token = iter.peek();
+	match first_token {
+		// We have a classic interval
+		Some(Token::LBracket) => {
+			// Consume the iterator
+			iter.next();
+			// Next there must be a number, comma, then number
+			let lower_bound = iter.next().ok_or("Missing lower bound")?;
+			let comma = iter.next().ok_or("Must have a comma in between interval bounds.")?;
+			let upper_bound = iter.next().ok_or("Missing upper bound")?;
+
+			let low = if let Token::Float(l) = lower_bound {
+				Ok(ValueType::from(*l))
+			} else if let Token::Integer(l) = lower_bound {
+				Ok(ValueType::from(*l))
+			} else {
+				Err("Lower bound must be numeric!")
+			}?;
+			let up = if let Token::Float(l) = upper_bound {
+				Ok(ValueType::from(*l))
+			} else if let Token::Integer(l) = upper_bound {
+				Ok(ValueType::from(*l))
+			} else {
+				Err("Upper bound must be numeric!".to_string())
+			}?;
+			match comma {
+				Token::Comma => Ok(Interval::TimeBoundWindow(low, up)),
+				_ => Err("Unexpected token in between bounds!".to_string()),
+			}
+			
+		}
+		// If we have a greater than or greater than equal, then we just need to consume one token
+		// for the lower bound. Further, we can treat it the same since it's in continuous time and
+		// PCTL does not support this kind of interval. Therefore, we can combine match arms here.
+		Some(Token::GreaterThan) | Some(Token::GreaterThanOrEqual) => {
+			let lower_bound = iter.next().ok_or("Missing lower bound")?;
+			let low = match lower_bound {
+				Token::Float(l) => Ok(ValueType::from(*l)),
+				Token::Integer(i) => Ok(ValueType::from(*i)),
+				_ => Err("Bound must be numeric!".to_string()),
+			}?;
+			Ok(Interval::TimeBoundedLower(low))
+		},
+		// If we have a less than or leq it may be PCTL, and so we have to treat them differently
+		Some(Token::LessThan) => {
+			let upper_bound = iter.next().ok_or("Missing upper bound")?;
+			let up = match upper_bound {
+				Token::Float(u) => Ok(ValueType::from(*u)),
+				Token::Integer(i) => Ok(ValueType::from(*i)),
+				_ => Err("Bound must be numeric!".to_string()),
+			}?;
+			Ok(Interval::TimeBoundedUpper(up))
+		}
+		// For less than equal to if it's an integer we have to adjust by 1 since a <= b is the
+		// same as a < b + 1 for integers. Floats/reals can remain unchanged as since in CSL, we
+		// are in continuous time so <T and <=T are largely equivalent for continuous R.V.
+		Some(Token::LessThanOrEqual) => {
+			let upper_bound = iter.next().ok_or("Missing upper bound")?;
+			let up = match upper_bound {
+				Token::Float(u) => Ok(ValueType::from(*u)),
+				Token::Integer(i) => Ok(ValueType::from(*i + 1)),
+				_ => Err("Bound must be numeric!".to_string()),
+			}?;
+			Ok(Interval::TimeBoundedUpper(up))
+		}	
+		// We just assume there is no interval or it is time unbound
+		_ => Ok(Interval::TimeUnbounded),
+	}
 }
 
 /// Parses binary operators
