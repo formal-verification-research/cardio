@@ -1,7 +1,6 @@
 use std::ops;
 
 use logos::Logos;
-use regex::Regex;
 
 use crate::matrix::CheckableNumber;
 
@@ -62,6 +61,18 @@ impl AtomicExpression {
 				};
 				Some(res)
 			}
+		}
+	}
+
+	pub fn is_convex(&self) -> bool {
+		match self {
+			Self::Value(_) | Self::Variable(_) => true,
+			Self::BinaryOperator(op, lhs, rhs) => match op {
+				BinaryApOperator::Plus | BinaryApOperator::Minus => {
+					lhs.is_convex() & rhs.is_convex()
+				}
+				_ => false,
+			},
 		}
 	}
 
@@ -196,6 +207,8 @@ where
 {
 	/// Evaluates to `true` on all states
 	True,
+	/// Evaluates to `false` on all states
+	False,
 	/// An atomic proposition which evaluates on a particular state
 	AtomicProposition(evalexpr::Node),
 	/// A string label for a particular state, i.e., "Absorbing"
@@ -204,6 +217,8 @@ where
 	Not(Box<StateFormula<ValueType>>),
 	/// The conjunction of two state formulae
 	Conjunction(Box<StateFormula<ValueType>>, Box<StateFormula<ValueType>>),
+	/// The Disjunction of two state formulae
+	Disjunction(Box<StateFormula<ValueType>>, Box<StateFormula<ValueType>>),
 	/// A probability query on a path formula. I.e., "from this state, what is the probability that
 	/// the next path formula holds?"
 	TransientQuery(ProbabilityQueryType<ValueType>, Box<PathFormula<ValueType>>),
@@ -225,6 +240,9 @@ where
 		// Prevent the tree from getting too complex
 		match self {
 			Self::Not(state_formula) => (*state_formula).clone(),
+			// True and false can just be inverted
+			Self::True => Self::False,
+			Self::False => Self::True,
 			_ => Self::Not(Box::new(self.clone())),
 		}
 	}
@@ -246,9 +264,7 @@ where
 {
 	type Output = Self;
 	fn bitor(self, rhs: Self) -> Self::Output {
-		// According to DeMorgan's law, A | B is equal to !(!A & !B)
-		// Also, now we can use the other overloaded operators.
-		!(!self & !rhs)
+		Self::Disjunction(Box::new(self.clone()), Box::new(rhs.clone()))
 	}
 }
 
@@ -259,6 +275,7 @@ where
 	fn to_string(&self) -> String {
 		match self {
 			Self::True => "true".to_string(),
+			Self::False => "false".to_string(),
 			Self::Not(subformula) => subformula.to_string(),
 			Self::AtomicProposition(ap) => ap.to_string(),
 			Self::StringLabel(label) => format!("\"{label}\""),
@@ -266,6 +283,11 @@ where
 				let lhs_str = lhs.to_string();
 				let rhs_str = rhs.to_string();
 				format!("({lhs_str}) & ({rhs_str})")
+			}
+			Self::Disjunction(lhs, rhs) => {
+				let lhs_str = lhs.to_string();
+				let rhs_str = rhs.to_string();
+				format!("({lhs_str}) | ({rhs_str})")
 			}
 			Self::TransientQuery(query_type, path_formula) => {
 				let qt_str = query_type.to_string();
@@ -287,9 +309,11 @@ where
 {
 	fn is_pctl(&self) -> bool {
 		match self {
-			Self::True | Self::StringLabel(_) | Self::AtomicProposition(_) => true,
+			Self::True | Self::False | Self::StringLabel(_) | Self::AtomicProposition(_) => true,
 			Self::Not(sf) => sf.is_pctl(),
-			Self::Conjunction(lhs, rhs) => lhs.is_pctl() && rhs.is_pctl(),
+			Self::Conjunction(lhs, rhs) | Self::Disjunction(lhs, rhs) => {
+				lhs.is_pctl() && rhs.is_pctl()
+			}
 			Self::TransientQuery(_, pf) => pf.is_pctl(),
 			Self::SteadyStateQuery(_, _) => false,
 		}
@@ -311,13 +335,16 @@ where
 		match self {
 			// If the state formula is just "true" we just return true.
 			Self::True => Some((Self::True, Self::True)),
+			// If the state formula is just "false" we just return false.
+			Self::False => Some((Self::False, Self::False)),
 			// If the state formula only evaluates on the current state, we just have to make sure
 			// we're not currently in the absorbing state for the lower bound, or allow it for the
 			// upper bound.
 			Self::AtomicProposition(_)
 			| Self::StringLabel(_)
 			| Self::Not(_)
-			| Self::Conjunction(_, _) => {
+			| Self::Conjunction(_, _)
+			| Self::Disjunction(_, _) => {
 				let lower_bound = self.clone() & !abs.clone();
 				let upper_bound = self.clone() | abs.clone();
 				Some((lower_bound, upper_bound))
@@ -395,7 +422,7 @@ where
 		Interval<ValueType>,
 		Box<StateFormula<ValueType>>,
 	),
-	/// A state formula holds on an entire path.
+	/// A state formula holds on an entire path. This is equivalent to Phi U False
 	Globally(Box<StateFormula<ValueType>>),
 }
 
