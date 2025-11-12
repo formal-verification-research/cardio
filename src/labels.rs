@@ -46,7 +46,7 @@ impl Labels {
 		}
 		None
 	}
-	
+
 	/// Gets the name of a label given its index. If the index is out of range, returns `None`.
 	pub fn index_to_label(&self, label_index: usize) -> Option<String> {
 		if self.label_names.len() >= label_index {

@@ -107,14 +107,15 @@ pub struct AtomicProposition {
 
 impl Property for AtomicProposition {
 	fn is_pctl(&self) -> bool {
-	    // All atomic propositions on states can be checked in CSL
+		// All atomic propositions on states can be checked in CSL
 		true
 	}
 
 	fn parse(input: &str) -> Result<Self, String>
-		where
-			Self: Sized {
-	    let tokens = lex(input);
+	where
+		Self: Sized,
+	{
+		let tokens = lex(input);
 		unimplemented!();
 	}
 }
@@ -592,7 +593,9 @@ where
 			iter.next();
 			// Next there must be a number, comma, then number
 			let lower_bound = iter.next().ok_or("Missing lower bound")?;
-			let comma = iter.next().ok_or("Must have a comma in between interval bounds.")?;
+			let comma = iter
+				.next()
+				.ok_or("Must have a comma in between interval bounds.")?;
 			let upper_bound = iter.next().ok_or("Missing upper bound")?;
 
 			let low = if let Token::Float(l) = lower_bound {
@@ -613,7 +616,6 @@ where
 				Token::Comma => Ok(Interval::TimeBoundWindow(low, up)),
 				_ => Err("Unexpected token in between bounds!".to_string()),
 			}
-			
 		}
 		// If we have a greater than or greater than equal, then we just need to consume one token
 		// for the lower bound. Further, we can treat it the same since it's in continuous time and
@@ -626,7 +628,7 @@ where
 				_ => Err("Bound must be numeric!".to_string()),
 			}?;
 			Ok(Interval::TimeBoundedLower(low))
-		},
+		}
 		// If we have a less than or leq it may be PCTL, and so we have to treat them differently
 		Some(Token::LessThan) => {
 			let upper_bound = iter.next().ok_or("Missing upper bound")?;
@@ -648,7 +650,7 @@ where
 				_ => Err("Bound must be numeric!".to_string()),
 			}?;
 			Ok(Interval::TimeBoundedUpper(up))
-		}	
+		}
 		// We just assume there is no interval or it is time unbound
 		_ => Ok(Interval::TimeUnbounded),
 	}
