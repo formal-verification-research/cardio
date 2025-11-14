@@ -1,22 +1,6 @@
 use crate::matrix::{CheckableNumber, SprsMatBuilder};
 use crate::rewards;
 
-/// An enum representing the possible time bounds that a CSL property can handle
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TimeBound<ValueType>
-where
-	ValueType: CheckableNumber,
-{
-	/// A time bound of the form [0, T]
-	TimeBoundedUpper(ValueType),
-	/// A time bound of the form [T, T']
-	TimeBoundWindow(ValueType, ValueType),
-	/// A time bound of the form [T, oo] (T to infinity)
-	TimeBoundedLower(ValueType),
-	/// The absence of a time bound (steady state)
-	TimeUnbounded,
-}
-
 /// The allowed types of model. Currently, there are only two options, but as Cardio expands, we
 /// may support non-determinism and thus MDPs and CTMDPs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

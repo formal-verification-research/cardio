@@ -4,7 +4,7 @@ use crate::*;
 use num::traits::{Bounded, real::Real};
 use sprs::{CsMat, CsVec};
 
-use self::model::TimeBound;
+use self::property::Interval;
 
 /// A CTMC transition matrix
 pub trait CtmcTransMat {
@@ -24,6 +24,7 @@ pub struct CheckContext<EntryType>
 where
 	EntryType: CheckableNumber,
 {
+	discrete_time: bool,
 	distribution: CsVec<EntryType>,
 	uniformized_matrix: CsMat<EntryType>,
 	time_bound: EntryType,
@@ -85,14 +86,27 @@ where
 		}
 
 		// Create the result vector
-		let first_iteration = fg_result.left;
-		// let mut result = if first_iteration == 0 {
-		// 	first_iteration += 1;
-		// 	let res = context.distribution.clone();
-		// 	res.
-		// } else {
-		//
-		// }
+		let mut first_iteration = fg_result.left;
+		let mut result = if first_iteration == 0 {
+			first_iteration += 1;
+			let res = context.distribution.clone();
+			res
+		// The initial result must be uniformized if we are in continuous time and using mixed
+		// poisson probabilities.
+		} else if self.use_mixed_poisson && !context.discrete_time {
+			context.distribution.map(|&elem| elem / context.epoch)
+		} else {
+			CsVec::empty(context.distribution.dim())
+		};
+
+		// An optimization shamelessly stolen from storm: if we don't have to use mixed poisson
+		// probabilities and our left fox-glynn result is > 1, we don't have to add anything and
+		// can just multiply in place.
+		if !self.use_mixed_poisson && fg_result.left > 1 {
+			todo!();
+		} else if self.use_mixed_poisson {
+			todo!();
+		}
 		unimplemented!();
 	}
 
@@ -103,14 +117,20 @@ where
 	pub fn compute_until(
 		&self,
 		context: &mut CheckContext<EntryType>,
-		bound: TimeBound<EntryType>,
+		bound: Interval<EntryType>,
 	) -> CsVec<EntryType> {
 		match bound {
-			TimeBound::TimeUnbounded => self.steady_state(context),
-			TimeBound::TimeBoundedUpper(upper_bound) => {
+			Interval::TimeUnbounded => self.steady_state(context),
+			Interval::TimeBoundedUpper(upper_bound) => {
 				unimplemented!();
 			}
-			TimeBound::TimeBoundWindow(lower_bound, upper_bound) => {
+			Interval::StepBoundUpper(steps) => {
+				// Here it works just like time bounded upper except rather than compute the number
+				// of steps from the epochs we can just tell the checker the number of steps to
+				// take, since it will be a DTMC.
+				unimplemented!();
+			}
+			Interval::TimeBoundWindow(lower_bound, upper_bound) => {
 				// Here there are two computations. For an interval of `Phi U [T,T'] Psi` we have
 				// two probabilities:
 				// (1) Stay in states |= Phi to time t, or
@@ -120,7 +140,7 @@ where
 				// distributiuon for
 				unimplemented!();
 			}
-			TimeBound::TimeBoundedLower(lower_bound) => {
+			Interval::TimeBoundedLower(lower_bound) => {
 				unimplemented!();
 			}
 		}
