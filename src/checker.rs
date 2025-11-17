@@ -117,13 +117,7 @@ where
 			// uniformization rate and add the values each iteration.
 			for i in 0..fg_result.left - 1 {
 				context.distribution *= context.uniformized_matrix;
-				context
-					.distribution
-					.iter_mut()
-					.zip(result.iter())
-					.map(|(value, dist_val)| {
-						value += dist_val / context.epoch;
-					});
+				context.distribution += result.map(|val| *val / context.epoch);
 			}
 
 			// scale values by total fox-glynn weight
@@ -136,11 +130,7 @@ where
 		for idx in first_iteration..=fg_result.right {
 			let weight = fg_result.weights[idx - fg_result.left];
 			context.distribution *= context.uniformized_matrix;
-			context
-				.distribution
-				.iter_mut()
-				.zip(result.iter())
-				.map(|(value, dist_val)| value + weight * dist_val);
+			context.distribution += result.map(|x| *x * weight);
 		}
 
 		// Scale the vector by total weight
