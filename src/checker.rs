@@ -107,16 +107,15 @@ where
 			for i in 0..fg_result.left - 1 {
 				// We use this operation to take advantage of the MulAssign trait provided by the
 				// CsVecI type in the sprs crate.
-				result *= context.uniformized_matrix;
+				result = context.uniformized_matrix * result;
 				// Unfortunately, I don't believe that there is an optimizable version of AddAssign
 				result = result + context.add_vec;
 			}
-			todo!();
 		} else if self.use_mixed_poisson {
 			// If using mixed poisson probabilities we have to scale the vector by the
 			// uniformization rate and add the values each iteration.
 			for i in 0..fg_result.left - 1 {
-				context.distribution *= context.uniformized_matrix;
+				context.distribution = context.uniformized_matrix * context.distribution;
 				context.distribution += result.map(|val| *val / context.epoch);
 			}
 
