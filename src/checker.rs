@@ -32,6 +32,8 @@ where
 	epsilon: EntryType,
 	/// The states for which we perform model checking
 	checked_values: bitvector::BitVector,
+	/// The value we add during the self multiplication
+	add_vec: CsVec<EntryType>,
 }
 
 pub struct CslChecker<EntryType>
@@ -89,8 +91,7 @@ where
 		let mut first_iteration = fg_result.left;
 		let mut result = if first_iteration == 0 {
 			first_iteration += 1;
-			let res = context.distribution.clone();
-			res
+			context.distribution.clone()
 		// The initial result must be uniformized if we are in continuous time and using mixed
 		// poisson probabilities.
 		} else if self.use_mixed_poisson && !context.discrete_time {
@@ -103,11 +104,48 @@ where
 		// probabilities and our left fox-glynn result is > 1, we don't have to add anything and
 		// can just multiply in place.
 		if !self.use_mixed_poisson && fg_result.left > 1 {
+			for i in 0..fg_result.left - 1 {
+				// We use this operation to take advantage of the MulAssign trait provided by the
+				// CsVecI type in the sprs crate.
+				result *= context.uniformized_matrix;
+				// Unfortunately, I don't believe that there is an optimizable version of AddAssign
+				result = result + context.add_vec;
+			}
 			todo!();
 		} else if self.use_mixed_poisson {
-			todo!();
+			// If using mixed poisson probabilities we have to scale the vector by the
+			// uniformization rate and add the values each iteration.
+			for i in 0..fg_result.left - 1 {
+				context.distribution *= context.uniformized_matrix;
+				context
+					.distribution
+					.iter_mut()
+					.zip(result.iter())
+					.map(|(value, dist_val)| {
+						value += dist_val / context.epoch;
+					});
+			}
+
+			// scale values by total fox-glynn weight
+			if fg_result.left > 0 {
+				result.map_inplace(|val| *val * fg_result.total_weight);
+			}
 		}
-		unimplemented!();
+
+		// In between the left and right fox glynn points, compute, scale and add results
+		for idx in first_iteration..=fg_result.right {
+			let weight = fg_result.weights[idx - fg_result.left];
+			context.distribution *= context.uniformized_matrix;
+			context
+				.distribution
+				.iter_mut()
+				.zip(result.iter())
+				.map(|(value, dist_val)| value + weight * dist_val);
+		}
+
+		// Scale the vector by total weight
+		result.map_inplace(|val| *val / fg_result.total_weight);
+		result
 	}
 
 	pub fn steady_state(&self, context: &mut CheckContext<EntryType>) -> CsVec<EntryType> {
