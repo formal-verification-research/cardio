@@ -3,6 +3,7 @@ use std::ops;
 use logos::Logos;
 
 use crate::matrix::CheckableNumber;
+use crate::parser::{lex, parse_path_formula, parse_state_formula};
 
 /// A trait for anything we can throw in a .props, .csl, or .pctl file.
 pub trait Property {

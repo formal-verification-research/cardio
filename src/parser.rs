@@ -1,4 +1,7 @@
-// Parsing stuff
+use logos::Logos;
+
+use crate::matrix::CheckableNumber;
+use crate::property::{Interval, PathFormula, ProbabilityQueryType, StateFormula};
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
@@ -98,7 +101,7 @@ pub fn lex(input: &str) -> Vec<Token> {
 	tokens
 }
 
-fn parse_interval<'a, ValueType, I>(
+pub fn parse_interval<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<Interval<ValueType>, String>
 where
@@ -177,11 +180,11 @@ where
 }
 
 /// Parses binary operators
-fn parse_expression<'a, ValueType, I>(
+pub fn parse_expression<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<StateFormula<ValueType>, String>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 	I: Iterator<Item = &'a Token>,
 {
 	let mut left = parse_state_formula(iter)?;
@@ -206,11 +209,11 @@ where
 	Ok(left)
 }
 
-fn parse_state_formula<'a, ValueType, I>(
+pub fn parse_state_formula<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<StateFormula<ValueType>, String>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 	I: Iterator<Item = &'a Token>,
 {
 	match iter.next() {
@@ -392,14 +395,44 @@ where
 	}
 }
 
-fn parse_path_formula<'a, ValueType, I>(
+pub fn parse_path_formula<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<PathFormula<ValueType>, String>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 	I: Iterator<Item = &'a Token>,
 {
-	unimplemented!();
+	match iter.peek() {
+		Some(Token::Globally) => {
+			iter.next();
+			let state_formula = parse_state_formula(iter)?;
+			Ok(PathFormula::globally(&state_formula))
+		}
+		Some(Token::Next) => {
+			iter.next();
+			let state_formula = parse_state_formula(iter)?;
+			Ok(PathFormula::next(&state_formula))
+		}
+		// If we get a state formula next then the only path formula we can have is an until
+		// formula. If there is not an until formula, then we return an error.
+		_ => {
+			let phi = parse_state_formula(iter)?;
+			match iter.next() {
+				Some(Token::Until) => {
+					// If the next token is an LBracket then there is an interval
+					let (interval, psi) = match iter.peek() {
+						Some(Token::LBracket) => {
+							(parse_interval(iter)?, parse_state_formula(iter)?)
+						}
+						_ => (Interval::TimeUnbounded, parse_state_formula(iter)?),
+					};
+					Ok(PathFormula::until(&phi, interval, &psi))
+				}
+
+				_ => Err("Not a path formula!".to_string()),
+			}
+		}
+	}
 }
 
 #[cfg(test)]
