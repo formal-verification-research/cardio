@@ -244,6 +244,8 @@ where
 					// On pages 26-27 of *Stochastic Model Checking* (https://doi.org/10.1007/978-3-540-72522-0_6),
 					// they note that if (2) is performed first, we can use it as an initial
 					// distributiuon for computation (1).
+
+					// First, we compute (2) given the initial distribution.
 					context.time_bound = upper_bound - lower_bound;
 					// TODO: Update relevant values based on the states which satisfy psi.
 					let distribution = self.compute_transient(context);
@@ -254,12 +256,45 @@ where
 					self.compute_transient(context)
 				}
 				Interval::TimeBoundedLower(lower_bound) => {
-					unimplemented!();
+					// This works the same way as the time bounded window, except t' - t is still
+					// unbounded and can be computed via the steady_state probability. Again, we
+					// compute (2) first, but this time it's via steady state.
+
+					// First, we compute (2) i.e., reaching a state that satisphies Psi in the
+					// steady state (since t' - t is unbounded).
+					// TODO: Update relevant values based on the states which satisfy psi.
+					let distribution = self.steady_state(context);
+					// Like in the window time bound, now we compute (1) from (2)
+					context.distribution = distribution;
+					context.time_bound = lower_bound;
+					// TODO: update relevant values based on the states which satisfy phi.
+					self.compute_transient(context)
 				}
 			};
 			if context.precision_reached(&intermediate_result) {
 				return intermediate_result;
 			}
 		}
+	}
+
+	/// Creates a "timeline" of distributions by the number of time epochs/steps, and the step
+	/// size. The return value is a vector of distributions with their time-steps.
+	pub fn distribution_timeline(
+		&self,
+		context: &mut CheckContext<EntryType>,
+		num_epochs: usize,
+		epoch_step: usize,
+	) -> Vec<(EntryType, CsVec<EntryType>)> {
+		// Iteratively compute the intermediate distributions at the given granularity, collecting
+		// the intermediate distributions into a vector and then returning them.
+		(0..=num_epochs)
+			.step_by(epoch_step)
+			.map(|i| {
+				context.time_bound = context.epoch * <EntryType as From<usize>>::from(i);
+				let distribution = self.compute_transient(context);
+				context.distribution = distribution.clone();
+				(context.time_bound, distribution)
+			})
+			.collect::<Vec<_>>()
 	}
 }
