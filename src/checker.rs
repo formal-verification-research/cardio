@@ -2,7 +2,7 @@ use crate::matrix::*;
 use crate::poisson::FoxGlynnBound;
 use crate::*;
 use bitvec::prelude::*;
-use num::traits::{Bounded, real::Real};
+use num::traits::{real::Real, Bounded};
 use sprs::{CsMat, CsVec};
 
 use self::property::Interval;
@@ -24,7 +24,7 @@ where
 /// A struct that contains the program context for a model checker.
 pub struct CheckContext<EntryType>
 where
-	EntryType: CheckableNumber + std::convert::From<f64>,
+	EntryType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	/// Whether the model is in discrete or continuous time
 	discrete_time: bool,
@@ -51,7 +51,7 @@ where
 
 impl<EntryType> CheckContext<EntryType>
 where
-	EntryType: CheckableNumber + std::convert::From<f64>,
+	EntryType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	/// If there are states for which the precision is relevant.
 	pub fn has_relevant_states(&self) -> bool {
@@ -111,6 +111,7 @@ where
 	EntryType: CheckableNumber
 		+ Bounded
 		+ std::convert::From<f64>
+		+ std::convert::From<i64>
 		+ std::convert::From<usize>
 		+ std::convert::From<isize>
 		+ Real,

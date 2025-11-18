@@ -136,7 +136,7 @@ impl Property for AtomicProposition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Interval<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	/// A time bound of the form [0, T]
 	TimeBoundedUpper(ValueType),
@@ -153,7 +153,7 @@ where
 
 impl<ValueType> ToString for Interval<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -170,7 +170,7 @@ where
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ProbabilityQueryType<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	/// A simple query that asks the probability
 	SimpleQuery,
@@ -186,7 +186,7 @@ where
 
 impl<ValueType> ToString for ProbabilityQueryType<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -204,7 +204,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub enum StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	/// Evaluates to `true` on all states
 	True,
@@ -233,7 +233,7 @@ where
 
 impl<ValueType> ops::Not for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	type Output = Self;
 
@@ -251,7 +251,7 @@ where
 
 impl<ValueType> ops::BitAnd for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	type Output = Self;
 	fn bitand(self, rhs: Self) -> Self::Output {
@@ -261,7 +261,7 @@ where
 
 impl<ValueType> ops::BitOr for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	type Output = Self;
 	fn bitor(self, rhs: Self) -> Self::Output {
@@ -271,7 +271,7 @@ where
 
 impl<ValueType> ToString for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -306,7 +306,7 @@ where
 
 impl<ValueType> Property for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	fn is_pctl(&self) -> bool {
 		match self {
@@ -328,7 +328,7 @@ where
 
 impl<ValueType> StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	/// Creates lower and upper bound properties, useful for STAMINA.
 	pub fn create_bounds(&self) -> Option<(Self, Self)> {
@@ -413,7 +413,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	/// If the state formula holds in the next state.
 	Next(Box<StateFormula<ValueType>>),
@@ -429,7 +429,7 @@ where
 
 impl<ValueType> Property for PathFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	fn is_pctl(&self) -> bool {
 		match self {
@@ -449,7 +449,7 @@ where
 
 impl<ValueType> ToString for PathFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -473,7 +473,7 @@ where
 
 impl<ValueType> PathFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64>,
+	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	/// Creates a state formula of type `next`
 	pub fn next(state_formula: &StateFormula<ValueType>) -> Self {
