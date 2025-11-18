@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bitvector = "0.1.5"
+bitvec = "1.0.1"
 evalexpr = "13.0.0"
 itertools = "0.14.0"
 logos = "0.15.1"

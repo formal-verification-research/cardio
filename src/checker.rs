@@ -1,7 +1,8 @@
 use crate::matrix::*;
 use crate::poisson::FoxGlynnBound;
 use crate::*;
-use num::traits::{Bounded, real::Real};
+use bitvec::prelude::*;
+use num::traits::{real::Real, Bounded};
 use sprs::{CsMat, CsVec};
 
 use self::property::Interval;
@@ -22,7 +23,7 @@ where
 
 pub struct CheckContext<EntryType>
 where
-	EntryType: CheckableNumber,
+	EntryType: CheckableNumber + std::convert::From<f64>,
 {
 	discrete_time: bool,
 	distribution: CsVec<EntryType>,
@@ -31,9 +32,58 @@ where
 	epoch: EntryType,
 	epsilon: EntryType,
 	/// The states for which we perform model checking
-	checked_values: bitvector::BitVector,
+	checked_values: BitVec,
 	/// The value we add during the self multiplication
 	add_vec: CsVec<EntryType>,
+	/// The states for which precision is relevant
+	relevant_states: BitVec,
+	/// The precision to which we check
+	precision: EntryType,
+}
+
+impl<EntryType> CheckContext<EntryType>
+where
+	EntryType: CheckableNumber + std::convert::From<f64>,
+{
+	/// If there are states for which the precision is relevant.
+	pub fn has_relevant_states(&self) -> bool {
+		!self.relevant_states.is_empty()
+	}
+
+	/// If any state in the distribution has a nonzero value
+	pub fn has_reachable_states(&self) -> bool {
+		self.distribution.nnz() > 0
+	}
+
+	/// Checks to see if we've reached the desired precision for all of the relevant states. This
+	/// function also updates the epsilon value thus it takes a `&mut self`.
+	pub fn precision_reached(&mut self, intermediate_result: &CsVec<EntryType>) -> bool {
+		// The element for new_epsilon when the result is zero
+		let zero_epsilon = self.epsilon * EntryType::from(0.1);
+		// Iterate over all relevant state indecies and check if their precision
+		let new_epsilon = intermediate_result
+			.iter()
+			.filter(|(idx, _)| {
+				if let Some(val) = self.relevant_states.get(*idx).as_deref() {
+					*val
+				} else {
+					false
+				}
+			})
+			.map(|(_, &state_result)| state_result * self.precision)
+			// We can't just use `min()` since floats do not implement Ord (only PartialOrd)
+			.fold(
+				zero_epsilon,
+				|val, new_val| if val > new_val { val } else { new_val },
+			);
+
+		if new_epsilon < self.epsilon {
+			self.epsilon = new_epsilon;
+			true
+		} else {
+			false
+		}
+	}
 }
 
 pub struct CslChecker<EntryType>
@@ -146,29 +196,34 @@ where
 		context: &mut CheckContext<EntryType>,
 		bound: Interval<EntryType>,
 	) -> CsVec<EntryType> {
-		match bound {
-			Interval::TimeUnbounded => self.steady_state(context),
-			Interval::TimeBoundedUpper(upper_bound) => {
-				unimplemented!();
-			}
-			Interval::StepBoundUpper(steps) => {
-				// Here it works just like time bounded upper except rather than compute the number
-				// of steps from the epochs we can just tell the checker the number of steps to
-				// take, since it will be a DTMC.
-				unimplemented!();
-			}
-			Interval::TimeBoundWindow(lower_bound, upper_bound) => {
-				// Here there are two computations. For an interval of `Phi U [T,T'] Psi` we have
-				// two probabilities:
-				// (1) Stay in states |= Phi to time t, or
-				// (2) Reaching a state |= Psi in time t' - t.
-				// On pages 26-27 of *Stochastic Model Checking* (https://doi.org/10.1007/978-3-540-72522-0_6),
-				// they note that if (2) is performed first, we can use it as an initial
-				// distributiuon for
-				unimplemented!();
-			}
-			Interval::TimeBoundedLower(lower_bound) => {
-				unimplemented!();
+		loop {
+			let intermediate_result = match bound {
+				Interval::TimeUnbounded => self.steady_state(context),
+				Interval::TimeBoundedUpper(upper_bound) => {
+					unimplemented!();
+				}
+				Interval::StepBoundUpper(steps) => {
+					// Here it works just like time bounded upper except rather than compute the number
+					// of steps from the epochs we can just tell the checker the number of steps to
+					// take, since it will be a DTMC.
+					unimplemented!();
+				}
+				Interval::TimeBoundWindow(lower_bound, upper_bound) => {
+					// Here there are two computations. For an interval of `Phi U [T,T'] Psi` we have
+					// two probabilities:
+					// (1) Stay in states |= Phi to time t, or
+					// (2) Reaching a state |= Psi in time t' - t.
+					// On pages 26-27 of *Stochastic Model Checking* (https://doi.org/10.1007/978-3-540-72522-0_6),
+					// they note that if (2) is performed first, we can use it as an initial
+					// distributiuon for
+					unimplemented!();
+				}
+				Interval::TimeBoundedLower(lower_bound) => {
+					unimplemented!();
+				}
+			};
+			if context.precision_reached(&intermediate_result) {
+				return intermediate_result;
 			}
 		}
 	}

@@ -1,11 +1,13 @@
+use bitvec::prelude::*;
+
 pub struct Labels {
 	/// Labels are stored as strings in a vector, with the index in the array representing the
-	/// label's index in the bitvector for the labelling of each state. The number stored with the
+	/// label's index in the bitvec for the labelling of each state. The number stored with the
 	/// labels is the number of states which the label has.
 	label_names: Vec<(String, usize)>,
 	/// The state labelling is an option since after we've constructed it, no more labels can be
-	/// added, otherwise we'd have to re-initialize every bitvector in the state labeling.
-	state_labelling: Option<Vec<bitvector::BitVector>>,
+	/// added, otherwise we'd have to re-initialize every bitvec in the state labeling.
+	state_labelling: Option<Vec<BitVec>>,
 }
 
 impl Default for Labels {
@@ -74,11 +76,13 @@ impl Labels {
 			// Resize the state labelling to the state index we've seen.
 			labelling.resize(
 				labelling.len().max(state_index + 1),
-				bitvector::BitVector::new(label_count),
+				BitVec::with_capacity(label_count),
 			);
 			// Update the count of labels
-			if labelling[state_index].insert(label_index) {
+			if labelling[state_index].len() >= label_index || labelling[state_index][label_index] {
 				self.label_names[label_index].1 += 1;
+			} else {
+				labelling[state_index].insert(label_index, true)
 			}
 		} else {
 			unimplemented!(); // Should we panic or create the state labelling?
