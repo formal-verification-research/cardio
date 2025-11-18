@@ -2,7 +2,7 @@ use crate::matrix::*;
 use crate::poisson::FoxGlynnBound;
 use crate::*;
 use bitvec::prelude::*;
-use num::traits::{real::Real, Bounded};
+use num::traits::{Bounded, real::Real};
 use sprs::{CsMat, CsVec};
 
 use self::property::Interval;
@@ -21,15 +21,23 @@ where
 	}
 }
 
+/// A struct that contains the program context for a model checker.
 pub struct CheckContext<EntryType>
 where
 	EntryType: CheckableNumber + std::convert::From<f64>,
 {
+	/// Whether the model is in discrete or continuous time
 	discrete_time: bool,
+	/// The (current) probability distribution over states.
+	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
 	distribution: CsVec<EntryType>,
+	/// The uniformized DTMC if a CTMC or the probability matrix if it is a DTMC.
 	uniformized_matrix: CsMat<EntryType>,
+	/// The time bound to compute probabilities to.
 	time_bound: EntryType,
+	/// The epoch time. If a DTMC, this should be one.
 	epoch: EntryType,
+	/// The numerical precision
 	epsilon: EntryType,
 	/// The states for which we perform model checking
 	checked_values: BitVec,
@@ -60,7 +68,9 @@ where
 	pub fn precision_reached(&mut self, intermediate_result: &CsVec<EntryType>) -> bool {
 		// The element for new_epsilon when the result is zero
 		let zero_epsilon = self.epsilon * EntryType::from(0.1);
-		// Iterate over all relevant state indecies and check if their precision
+		// Iterate over all relevant state indecies, take the results and map them to a candidate
+		// next epsilon. We take the minimum of these as our new epsilon. If our new epsilon is
+		// lower than the old epsilon then we can terminate, otherwise, continue.
 		let new_epsilon = intermediate_result
 			.iter()
 			.filter(|(idx, _)| {
@@ -86,6 +96,7 @@ where
 	}
 }
 
+/// A CSL or PCTL model checker.
 pub struct CslChecker<EntryType>
 where
 	EntryType: num::Num + Clone,
@@ -157,6 +168,7 @@ where
 			for i in 0..fg_result.left - 1 {
 				// We use this operation to take advantage of the MulAssign trait provided by the
 				// CsVecI type in the sprs crate.
+				// TODO: Figure out the trait constraint to get this to compile.
 				result = context.uniformized_matrix * result;
 				// Unfortunately, I don't believe that there is an optimizable version of AddAssign
 				result = result + context.add_vec;
@@ -165,6 +177,7 @@ where
 			// If using mixed poisson probabilities we have to scale the vector by the
 			// uniformization rate and add the values each iteration.
 			for i in 0..fg_result.left - 1 {
+				// TODO: Figure out the trait constraint to get this to compile.
 				context.distribution = context.uniformized_matrix * context.distribution;
 				context.distribution += result.map(|val| *val / context.epoch);
 			}
@@ -177,6 +190,7 @@ where
 
 		// In between the left and right fox glynn points, compute, scale and add results
 		for idx in first_iteration..=fg_result.right {
+			// TODO: Figure out the trait constraint to get this to compile.
 			let weight = fg_result.weights[idx - fg_result.left];
 			context.distribution *= context.uniformized_matrix;
 			context.distribution += result.map(|x| *x * weight);
@@ -191,22 +205,36 @@ where
 		unimplemented!();
 	}
 
+	/// This function computes until probabilities of the form Phi U Psi. It takes two parameters:
+	/// 1. The template context, called `context`. This includes things like the precision, and the model, but
+	/// things like the time bound may be altered. The user should not re-use the context after
+	/// this function is called as it may modify it.
+	/// 2. The time bound `bound`. If it is time-unbounded, then `self.steady_state()` will instead
+	/// be called.
 	pub fn compute_until(
 		&self,
 		context: &mut CheckContext<EntryType>,
 		bound: Interval<EntryType>,
 	) -> CsVec<EntryType> {
+		// Loop until we've reached the desired termination.
 		loop {
 			let intermediate_result = match bound {
 				Interval::TimeUnbounded => self.steady_state(context),
 				Interval::TimeBoundedUpper(upper_bound) => {
-					unimplemented!();
+					context.time_bound = upper_bound;
+					self.compute_transient(context)
 				}
 				Interval::StepBoundUpper(steps) => {
 					// Here it works just like time bounded upper except rather than compute the number
 					// of steps from the epochs we can just tell the checker the number of steps to
 					// take, since it will be a DTMC.
-					unimplemented!();
+
+					// Must be a DTMC and thus the epoch (the time in between steps) must be 1
+					assert!(context.epoch == EntryType::one());
+					// Update the context's bound with the number of steps.
+					context.time_bound = <EntryType as From<usize>>::from(steps);
+					// TODO: Update relevant values based on the states which satisfy phi.
+					self.compute_transient(context)
 				}
 				Interval::TimeBoundWindow(lower_bound, upper_bound) => {
 					// Here there are two computations. For an interval of `Phi U [T,T'] Psi` we have
@@ -215,8 +243,15 @@ where
 					// (2) Reaching a state |= Psi in time t' - t.
 					// On pages 26-27 of *Stochastic Model Checking* (https://doi.org/10.1007/978-3-540-72522-0_6),
 					// they note that if (2) is performed first, we can use it as an initial
-					// distributiuon for
-					unimplemented!();
+					// distributiuon for computation (1).
+					context.time_bound = upper_bound - lower_bound;
+					// TODO: Update relevant values based on the states which satisfy psi.
+					let distribution = self.compute_transient(context);
+					// Now, compute (1) from (2).
+					context.distribution = distribution;
+					context.time_bound = lower_bound;
+					// TODO: update relevant values based on the states which satisfy phi.
+					self.compute_transient(context)
 				}
 				Interval::TimeBoundedLower(lower_bound) => {
 					unimplemented!();
