@@ -118,6 +118,8 @@ where
 	isize: From<EntryType>,
 	f64: From<EntryType>,
 {
+	/// Computes the transient probabilities for a given context and relevent values. The relevant
+	/// values are the nonzero probabilities and the states who have the labels we care about.
 	pub fn compute_transient(&self, context: &mut CheckContext<EntryType>) -> CsVec<EntryType> {
 		let lambda = context.epoch * context.time_bound;
 		// Return the initial distribution if no epochs pass.
@@ -250,6 +252,7 @@ where
 					// TODO: Update relevant values based on the states which satisfy psi.
 					let distribution = self.compute_transient(context);
 					// Now, compute (1) from (2).
+					// TODO: zero the distribution values for any state which does not satisfy psi
 					context.distribution = distribution;
 					context.time_bound = lower_bound;
 					// TODO: update relevant values based on the states which satisfy phi.
@@ -265,6 +268,7 @@ where
 					// TODO: Update relevant values based on the states which satisfy psi.
 					let distribution = self.steady_state(context);
 					// Like in the window time bound, now we compute (1) from (2)
+					// TODO: zero the distribution values for any state which does not satisfy psi
 					context.distribution = distribution;
 					context.time_bound = lower_bound;
 					// TODO: update relevant values based on the states which satisfy phi.
