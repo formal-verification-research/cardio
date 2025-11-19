@@ -1,6 +1,9 @@
+use std::sync::RwLock;
+
 use crate::matrix::*;
 use crate::poisson::FoxGlynnBound;
 use crate::*;
+
 use bitvec::prelude::*;
 use num::traits::{real::Real, Bounded};
 use sprs::{CsMat, CsVec};
@@ -21,22 +24,33 @@ where
 	}
 }
 
-/// A struct that contains the program context for a model checker.
-pub struct CheckContext<EntryType>
+pub struct ExplicitModelContext<EntryType>
 where
 	EntryType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
 {
 	/// Whether the model is in discrete or continuous time
 	discrete_time: bool,
+	/// The state and transition labelling
+	labels: labels::Labels,
+	/// The uniformized DTMC if a CTMC or the probability matrix if it is a DTMC.
+	uniformized_matrix: CsMat<EntryType>,
+	/// The epoch time. If a DTMC, this should be one.
+	epoch: EntryType,
+}
+
+/// A struct that contains the program context for a model checker.
+pub struct CheckContext<EntryType>
+where
+	EntryType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+{
 	/// The (current) probability distribution over states.
 	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
 	distribution: CsVec<EntryType>,
-	/// The uniformized DTMC if a CTMC or the probability matrix if it is a DTMC.
-	uniformized_matrix: CsMat<EntryType>,
+	/// The model to be checked, including the uniformization matrix as well as the labelling and
+	/// the epoch
+	model_context: RwLock<ExplicitModelContext<EntryType>>,
 	/// The time bound to compute probabilities to.
 	time_bound: EntryType,
-	/// The epoch time. If a DTMC, this should be one.
-	epoch: EntryType,
 	/// The numerical precision
 	epsilon: EntryType,
 	/// The states for which we perform model checking
@@ -122,7 +136,9 @@ where
 	/// Computes the transient probabilities for a given context and relevent values. The relevant
 	/// values are the nonzero probabilities and the states who have the labels we care about.
 	pub fn compute_transient(&self, context: &mut CheckContext<EntryType>) -> CsVec<EntryType> {
-		let lambda = context.epoch * context.time_bound;
+		// TODO: more graceful handling if cannot read
+		let model = context.model_context.read().unwrap();
+		let lambda = model.epoch * context.time_bound;
 		// Return the initial distribution if no epochs pass.
 		if lambda.is_zero() {
 			return context.distribution.clone();
@@ -139,7 +155,7 @@ where
 					left += 1;
 				} else {
 					let right_weight = fg_result.weights[right];
-					fg_result.weights[right] = sum_right / context.epoch;
+					fg_result.weights[right] = sum_right / model.epoch;
 					sum_right += right_weight;
 					if right == 0 {
 						break;
@@ -158,8 +174,8 @@ where
 			context.distribution.clone()
 		// The initial result must be uniformized if we are in continuous time and using mixed
 		// poisson probabilities.
-		} else if self.use_mixed_poisson && !context.discrete_time {
-			context.distribution.map(|&elem| elem / context.epoch)
+		} else if self.use_mixed_poisson && !model.discrete_time {
+			context.distribution.map(|&elem| elem / model.epoch)
 		} else {
 			CsVec::empty(context.distribution.dim())
 		};
@@ -172,7 +188,7 @@ where
 				// We use this operation to take advantage of the MulAssign trait provided by the
 				// CsVecI type in the sprs crate.
 				// TODO: Figure out the trait constraint to get this to compile.
-				result = context.uniformized_matrix * result;
+				result = model.uniformized_matrix * result;
 				// Unfortunately, I don't believe that there is an optimizable version of AddAssign
 				result = result + context.add_vec;
 			}
@@ -181,8 +197,8 @@ where
 			// uniformization rate and add the values each iteration.
 			for i in 0..fg_result.left - 1 {
 				// TODO: Figure out the trait constraint to get this to compile.
-				context.distribution = context.uniformized_matrix * context.distribution;
-				context.distribution += result.map(|val| *val / context.epoch);
+				context.distribution = model.uniformized_matrix * context.distribution;
+				context.distribution += result.map(|val| *val / model.epoch);
 			}
 
 			// scale values by total fox-glynn weight
@@ -195,7 +211,7 @@ where
 		for idx in first_iteration..=fg_result.right {
 			// TODO: Figure out the trait constraint to get this to compile.
 			let weight = fg_result.weights[idx - fg_result.left];
-			context.distribution *= context.uniformized_matrix;
+			context.distribution *= model.uniformized_matrix;
 			context.distribution += result.map(|x| *x * weight);
 		}
 
@@ -219,6 +235,7 @@ where
 		context: &mut CheckContext<EntryType>,
 		bound: Interval<EntryType>,
 	) -> CsVec<EntryType> {
+		let epoch = context.model_context.read().unwrap().epoch;
 		// Loop until we've reached the desired termination.
 		loop {
 			let intermediate_result = match bound {
@@ -233,7 +250,7 @@ where
 					// take, since it will be a DTMC.
 
 					// Must be a DTMC and thus the epoch (the time in between steps) must be 1
-					assert!(context.epoch == EntryType::one());
+					assert!(epoch == EntryType::one());
 					// Update the context's bound with the number of steps.
 					context.time_bound = <EntryType as From<usize>>::from(steps);
 					// TODO: Update relevant values based on the states which satisfy phi.
@@ -290,12 +307,13 @@ where
 		num_epochs: usize,
 		epoch_step: usize,
 	) -> Vec<(EntryType, CsVec<EntryType>)> {
+		let epoch = context.model_context.read().unwrap().epoch;
 		// Iteratively compute the intermediate distributions at the given granularity, collecting
 		// the intermediate distributions into a vector and then returning them.
 		(0..=num_epochs)
 			.step_by(epoch_step)
 			.map(|i| {
-				context.time_bound = context.epoch * <EntryType as From<usize>>::from(i);
+				context.time_bound = epoch * <EntryType as From<usize>>::from(i);
 				let distribution = self.compute_transient(context);
 				context.distribution = distribution.clone();
 				(context.time_bound, distribution)
