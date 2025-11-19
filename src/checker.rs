@@ -77,6 +77,11 @@ where
 		self.distribution.nnz() > 0
 	}
 
+	/// Get the epoch from the model with the read lock only taken in the context of this function.
+	pub fn epoch(&self) -> EntryType {
+		self.model_context.read().unwrap().epoch
+	}
+
 	/// Checks to see if we've reached the desired precision for all of the relevant states. This
 	/// function also updates the epsilon value thus it takes a `&mut self`.
 	pub fn precision_reached(&mut self, intermediate_result: &CsVec<EntryType>) -> bool {
@@ -235,7 +240,7 @@ where
 		context: &mut CheckContext<EntryType>,
 		bound: Interval<EntryType>,
 	) -> CsVec<EntryType> {
-		let epoch = context.model_context.read().unwrap().epoch;
+		let epoch = context.epoch();
 		// Loop until we've reached the desired termination.
 		loop {
 			let intermediate_result = match bound {
@@ -307,7 +312,7 @@ where
 		num_epochs: usize,
 		epoch_step: usize,
 	) -> Vec<(EntryType, CsVec<EntryType>)> {
-		let epoch = context.model_context.read().unwrap().epoch;
+		let epoch = context.epoch();
 		// Iteratively compute the intermediate distributions at the given granularity, collecting
 		// the intermediate distributions into a vector and then returning them.
 		(0..=num_epochs)
