@@ -311,9 +311,12 @@ where
 		// Loop until we've reached the desired termination.
 		loop {
 			let intermediate_result = match bound {
+				// TODO: update this.
 				Interval::TimeUnbounded => self.steady_state(context),
 				Interval::TimeBoundedUpper(upper_bound) => {
 					context.time_bound = upper_bound;
+					// Update relevant values based on the states which satisfy phi.
+					context.update_relevant_states(&phi_label_mask);
 					self.compute_transient(context)
 				}
 				Interval::StepBoundUpper(steps) => {

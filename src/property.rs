@@ -507,3 +507,27 @@ where
 
 	// TODO: Weak until and release.
 }
+
+#[cfg(test)]
+mod property_tests {
+	use super::{Interval, PathFormula, StateFormula};
+
+	#[test]
+	fn construction_test() {
+		let phi: StateFormula<f64> = StateFormula::absorbing();
+		let neg_phi = !phi.clone();
+		let eventually_abs: PathFormula<f64> =
+			PathFormula::eventually(Interval::<_>::TimeUnbounded, &phi);
+		let globally_not_abs: PathFormula<f64> = PathFormula::globally(&neg_phi);
+		println!("Property 1: {}", phi.to_string());
+		println!("Property 2: {}", neg_phi.to_string());
+		println!("Property 3: {}", eventually_abs.to_string());
+		println!("Property 4: {}", globally_not_abs.to_string());
+	}
+
+	#[test]
+	fn negation_test() {
+		// let phi: StateFormula<f64> = StateFormula::AtomicProposition(evalexpr::)
+		unimplemented!();
+	}
+}
