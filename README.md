@@ -11,9 +11,15 @@ We would like Cardio to be competitive in speed to [Storm](https://github.com/mo
 
 ## Features
 
-- [ ] CSL and PCTL parsing (in progress)
+- [ ] CSL and PCTL parsing (in progress--mostly finished)
 - [x] Rewards
-- [ ] Transient analysis
-- [ ] Steady State Analysis
+- [ ] Transient analysis (in progress)
+- [ ] Steady State Analysis (planned)
 
 ...and more.
+
+---
+
+Cardio is licensed under the GNU General Public License v3. It is open source software, free as in free speech, and always will be.
+
+Cardio is developed at Utah State University in Logan, UT, USA.
