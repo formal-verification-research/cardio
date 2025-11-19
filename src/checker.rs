@@ -38,6 +38,16 @@ where
 	epoch: EntryType,
 }
 
+impl<EntryType> ExplicitModelContext<EntryType>
+where
+	EntryType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+{
+	/// Returns the number of states in the explicit model
+	pub fn state_count(&self) -> usize {
+		self.uniformized_matrix.cols()
+	}
+}
+
 /// A struct that contains the program context for a model checker.
 pub struct CheckContext<EntryType>
 where
@@ -112,6 +122,61 @@ where
 		} else {
 			false
 		}
+	}
+
+	/// Scales the distribution so that its L1 norm is 1.
+	pub fn scale_distribution(&mut self) {
+		let l1 = self.distribution.l1_norm();
+		self.distribution /= l1;
+	}
+
+	/// Tells whether the distribution sums to 1, as is needed for an unconditional probability
+	/// distribution, but is not strictly necessary for, e.g., the second step in a phi U psi
+	/// computation.
+	pub fn is_valid_distribution(&self) -> bool {
+		self.distribution.l1_norm().is_one()
+	}
+
+	/// Updates the relevant_states vector with the states that have state labels whose indecies
+	/// are marked with the `label_indecies` input parameter. For use in computing until formulae,
+	/// the user should first zero out the non-satisfying states for phi in the distribution. Do
+	/// not scale the distribution, since the distribution will only need to be re-scaled at the
+	/// end in the inverse direction.
+	pub fn update_relevant_states(&mut self, label_indecies: &BitVec) {
+		let model = self.model_context.read().unwrap();
+		assert!(label_indecies.len() == model.labels.label_count());
+		let state_count = model.state_count();
+		self.relevant_states = BitVec::with_capacity(state_count);
+		for (idx, &val) in self.distribution.iter() {
+			if !val.is_zero() && model.labels.state_has_labels(idx, &label_indecies) {
+				self.relevant_states.set(idx, true);
+			}
+		}
+	}
+
+	/// Zeroes any state index in the distribution that does not have the labels in the label
+	/// bitmask provided. If the bitmask does not match the number of labels, this function will
+	/// panic. This function does not re-scale the distribution so that its L1 norm is 1, and so
+	/// does not preserve the property that the distribution is a valid probability distribution.
+	/// However, this is useful in until formulae phi U psi.
+	pub fn zero_unsatisfying_states(&mut self, label_indecies: &BitVec) {
+		let model = self.model_context.read().unwrap();
+		assert!(label_indecies.len() == model.labels.label_count());
+		// We can just filter_map out the states into the new distribution who do not have all the
+		// labels in the label_indecies bitvector. Then, just unzip them into the indecies and data
+		// vectors needed to create a new sparse vector.
+		let (new_idxes, new_data): (Vec<_>, Vec<_>) = self
+			.distribution
+			.iter()
+			.filter_map(|(idx, &val)| {
+				if model.labels.state_has_labels(idx, &label_indecies) {
+					Some((idx, val.clone()))
+				} else {
+					None
+				}
+			})
+			.unzip();
+		self.distribution = CsVec::new(new_idxes.len(), new_idxes, new_data);
 	}
 }
 
@@ -239,6 +304,8 @@ where
 		&self,
 		context: &mut CheckContext<EntryType>,
 		bound: Interval<EntryType>,
+		phi_label_mask: BitVec,
+		psi_label_mask: BitVec,
 	) -> CsVec<EntryType> {
 		let epoch = context.epoch();
 		// Loop until we've reached the desired termination.
@@ -258,7 +325,9 @@ where
 					assert!(epoch == EntryType::one());
 					// Update the context's bound with the number of steps.
 					context.time_bound = <EntryType as From<usize>>::from(steps);
-					// TODO: Update relevant values based on the states which satisfy phi.
+					// Update relevant values based on the states which satisfy phi.
+					context.update_relevant_states(&phi_label_mask);
+					// Finally, compute transient probabilities
 					self.compute_transient(context)
 				}
 				Interval::TimeBoundWindow(lower_bound, upper_bound) => {
@@ -272,13 +341,16 @@ where
 
 					// First, we compute (2) given the initial distribution.
 					context.time_bound = upper_bound - lower_bound;
-					// TODO: Update relevant values based on the states which satisfy psi.
+					// Update relevant values based on the states which satisfy phi.
+					context.update_relevant_states(&phi_label_mask);
 					let distribution = self.compute_transient(context);
 					// Now, compute (1) from (2).
-					// TODO: zero the distribution values for any state which does not satisfy psi
 					context.distribution = distribution;
+					// Zero the distribution values for any state which does not satisfy psi
+					context.zero_unsatisfying_states(&psi_label_mask);
 					context.time_bound = lower_bound;
-					// TODO: update relevant values based on the states which satisfy phi.
+					// Update relevant values based on the states which satisfy phi.
+					context.update_relevant_states(&phi_label_mask);
 					self.compute_transient(context)
 				}
 				Interval::TimeBoundedLower(lower_bound) => {
@@ -288,13 +360,16 @@ where
 
 					// First, we compute (2) i.e., reaching a state that satisphies Psi in the
 					// steady state (since t' - t is unbounded).
-					// TODO: Update relevant values based on the states which satisfy psi.
 					let distribution = self.steady_state(context);
+					// Update relevant values based on the states which satisfy psi.
+					context.update_relevant_states(&psi_label_mask);
 					// Like in the window time bound, now we compute (1) from (2)
-					// TODO: zero the distribution values for any state which does not satisfy psi
 					context.distribution = distribution;
+					// Zero the distribution values for any state which does not satisfy psi
+					context.zero_unsatisfying_states(&psi_label_mask);
 					context.time_bound = lower_bound;
-					// TODO: update relevant values based on the states which satisfy phi.
+					// Update relevant values based on the states which satisfy phi.
+					context.update_relevant_states(&phi_label_mask);
 					self.compute_transient(context)
 				}
 			};
@@ -324,5 +399,16 @@ where
 				(context.time_bound, distribution)
 			})
 			.collect::<Vec<_>>()
+	}
+
+	/// A parallelized version of `distribution_timeline()`.
+	pub fn distribution_timeline_concurrent(
+		&self,
+		context: &mut CheckContext<EntryType>,
+		num_epochs: usize,
+		epoch_step: usize,
+		num_threads: usize,
+	) -> Vec<(EntryType, CsVec<EntryType>)> {
+		unimplemented!();
 	}
 }

@@ -88,6 +88,40 @@ impl Labels {
 			unimplemented!(); // Should we panic or create the state labelling?
 		}
 	}
+
+	/// Gets whether or not a state has a particular label. If the label index exceeds the
+	/// number of labels in the structure, then this function panics. However, the labelling is not
+	/// conscious of the number of states, so if the state index is higher than the number of
+	/// existing states, then it just returns false.
+	pub fn state_has_label(&self, state_index: usize, label_index: usize) -> bool {
+		let label_count = self.label_count();
+		assert!(label_index < label_count);
+		if let Some(labelling) = &self.state_labelling {
+			if state_index >= labelling.len() {
+				false
+			} else {
+				*labelling[state_index].get(label_index).as_deref().unwrap()
+			}
+		} else {
+			false
+		}
+	}
+
+	/// Works like `state_has_label` except all of the label indecies flagged in the bitmask have
+	/// to be true for the state at `state_index` in order for the function to return true.
+	pub fn state_has_labels(&self, state_index: usize, label_bitmask: &BitVec) -> bool {
+		let label_count = self.label_count();
+		assert!(label_bitmask.len() < label_count);
+		if let Some(labelling) = &self.state_labelling {
+			if state_index >= labelling.len() {
+				false
+			} else {
+				labelling[state_index].clone() & label_bitmask == label_bitmask.as_bitslice()
+			}
+		} else {
+			false
+		}
+	}
 }
 
 impl ToString for Labels {
