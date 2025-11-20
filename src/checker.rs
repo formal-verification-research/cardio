@@ -26,7 +26,7 @@ where
 
 pub struct ExplicitModelContext<EntryType>
 where
-	EntryType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	EntryType: CheckableNumber + num::FromPrimitive,
 {
 	/// Whether the model is in discrete or continuous time
 	discrete_time: bool,
@@ -40,7 +40,7 @@ where
 
 impl<EntryType> ExplicitModelContext<EntryType>
 where
-	EntryType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	EntryType: CheckableNumber + num::FromPrimitive,
 {
 	/// Returns the number of states in the explicit model
 	pub fn state_count(&self) -> usize {
@@ -51,7 +51,7 @@ where
 /// A struct that contains the program context for a model checker.
 pub struct CheckContext<EntryType>
 where
-	EntryType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	EntryType: CheckableNumber + num::FromPrimitive,
 {
 	/// The (current) probability distribution over states.
 	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
@@ -75,7 +75,7 @@ where
 
 impl<EntryType> CheckContext<EntryType>
 where
-	EntryType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	EntryType: CheckableNumber + num::FromPrimitive,
 {
 	/// If there are states for which the precision is relevant.
 	pub fn has_relevant_states(&self) -> bool {
@@ -96,7 +96,7 @@ where
 	/// function also updates the epsilon value thus it takes a `&mut self`.
 	pub fn precision_reached(&mut self, intermediate_result: &CsVec<EntryType>) -> bool {
 		// The element for new_epsilon when the result is zero
-		let zero_epsilon = self.epsilon * EntryType::from(0.1);
+		let zero_epsilon = self.epsilon * EntryType::from_f64(0.1).unwrap();
 		// Iterate over all relevant state indecies, take the results and map them to a candidate
 		// next epsilon. We take the minimum of these as our new epsilon. If our new epsilon is
 		// lower than the old epsilon then we can terminate, otherwise, continue.
@@ -194,7 +194,7 @@ impl<EntryType> CslChecker<EntryType>
 where
 	EntryType: CheckableNumber
 		+ Bounded
-		+ std::convert::From<f64>
+		+ num::FromPrimitive
 		+ std::convert::From<i64>
 		+ std::convert::From<usize>
 		+ std::convert::From<isize>

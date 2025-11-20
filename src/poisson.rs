@@ -2,7 +2,7 @@
 
 use std::f64::{self, consts::PI};
 
-use num::{Bounded, traits::real::Real};
+use num::{traits::real::Real, Bounded};
 
 use crate::matrix;
 
@@ -11,7 +11,7 @@ pub struct FoxGlynnBound<ValueType>
 where
 	ValueType: matrix::CheckableNumber
 		+ Bounded
-		+ std::convert::From<f64>
+		+ num::FromPrimitive
 		+ std::convert::From<usize>
 		+ std::convert::From<isize>
 		+ Real,
@@ -29,7 +29,7 @@ impl<ValueType> Default for FoxGlynnBound<ValueType>
 where
 	ValueType: matrix::CheckableNumber
 		+ Bounded
-		+ std::convert::From<f64>
+		+ num::FromPrimitive
 		+ std::convert::From<usize>
 		+ std::convert::From<isize>
 		+ Real,
@@ -51,7 +51,7 @@ impl<ValueType> FoxGlynnBound<ValueType>
 where
 	ValueType: matrix::CheckableNumber
 		+ Bounded
-		+ std::convert::From<f64>
+		+ num::FromPrimitive
 		+ std::convert::From<usize>
 		+ std::convert::From<isize>
 		+ Real,
@@ -67,12 +67,13 @@ where
 	/// Note that this is the `FINDER` subroutine described in Section 3 of the Fox-Glynn paper.
 	fn fg_find(lambda: ValueType, epsilon: ValueType) -> Self {
 		let one = ValueType::one();
+		let p5 = ValueType::from_f64(0.5).unwrap();
 		// Start by setting up constants and variables
 		let (mut tau, omega) = (
 			<ValueType as Bounded>::min_value(),
 			<ValueType as Bounded>::max_value(),
 		);
-		let root2pi = <ValueType as From<f64>>::from((2.0 * PI).sqrt());
+		let root2pi = ValueType::from_f64((2.0 * PI).sqrt()).unwrap();
 		// Error bound only uses epsilon * root2pi
 		let mut er2pi = epsilon * root2pi;
 
@@ -98,13 +99,14 @@ where
 			// We actually have to look for the left truncation point iteratively if m >= 25
 
 			// First, compute a couple constants that are needed.
-			let b = (one + lambda.recip()) * (lambda.recip() * 0.125.into()).exp();
+			let b = (one + lambda.recip())
+				* (lambda.recip() * ValueType::from_f64(0.125).unwrap()).exp();
 			let root_lmbda = lambda.sqrt();
 			let mut k: ValueType = <ValueType as From<usize>>::from(4);
 
 			loop {
 				// First, compute a candidate for `left`.
-				left = m as isize - isize::from((k * root_lmbda + 0.5.into()).ceil());
+				left = m as isize - isize::from((k * root_lmbda + p5).ceil());
 
 				// If the truncation point is negative, then make it zero and terminate the loop.
 				if left.is_negative() {
@@ -114,7 +116,7 @@ where
 
 				// It's a good thing we reference the Storm code in this implementation, since they
 				// correctly point out that Fox-Glynn mixes up Phi and 1 - Phi in Propositions 2-4.
-				let max_err = b * (-k.powi(2) / 0.5.into()).exp() / k;
+				let max_err = b * (-k.powi(2) / p5).exp() / k;
 
 				// If the left-hand error is relatively small, loosen the requirements on the right
 				// hand side and do not bound the left-hand side any farther.
@@ -133,15 +135,15 @@ where
 		// Now we just have to compute the right bound. However, first we must compute a couple
 		// of constants and update the epsilon value.
 
-		let mut k: ValueType = <ValueType as From<usize>>::from(4);
+		let mut k: ValueType = ValueType::from_i8(4).unwrap();
 		// Fox-Glynn draws a line at lambda = 400. If below, then set lambda at 400, and if
 		// not, use the higher value to compute the right bound.
 		let (lambda_max, m_max): (ValueType, isize) = if m < 400 {
-			let magic_const = <ValueType as From<f64>>::from(0.662608824988162441697980);
+			let magic_const = ValueType::from_f64(0.662608824988162441697980).unwrap();
 			er2pi *= magic_const;
-			(<ValueType as From<usize>>::from(400), 400)
+			(ValueType::from_usize(400).unwrap(), 400)
 		} else {
-			let magic_const = <ValueType as From<f64>>::from(0.664265347050632847802225);
+			let magic_const = ValueType::from_f64(0.664265347050632847802225).unwrap();
 			// This allows us to prevent multiple casting.
 			er2pi *= (one - (lambda + one).recip()) * magic_const;
 			(lambda, m as isize)
@@ -153,15 +155,15 @@ where
 		loop {
 			// The magic constants in the above if-statement come from the fact that we don't have
 			// to compute the extra multiplier factor here.
-			if er2pi * k >= (-k.powi(2) * 0.5.into()).exp() {
+			if er2pi * k >= (-k.powi(2) * p5).exp() {
 				break;
 			}
 			// Increment k
 			k += one;
 		}
 		// Compute the right bound and determine if it's reliable.
-		right = m_max + isize::from((k * (lambda_max + lambda_max).sqrt() + 0.5.into()).ceil());
-		let reliability_bound = m_max + isize::from((lambda_max + ValueType::one()) * 0.5.into());
+		right = m_max + isize::from((k * (lambda_max + lambda_max).sqrt() + p5).ceil());
+		let reliability_bound = m_max + isize::from((lambda_max + ValueType::one()) * p5);
 		if right > reliability_bound {
 			eprintln!(
 				"Right bound unreliable! ({0} > {1})",
@@ -179,10 +181,11 @@ where
 		};
 		// Although we've reserved the capacity, we actually have to make the vector the correct
 		// size. We'll set the uninitialized values to zero...
-		res.weights.resize(weights_count, 0.0.into());
+		res.weights.resize(weights_count, ValueType::zero());
 		// ...but we do have one slot we know the value for.
-		res.weights[m - res.left] =
-			omega / (<ValueType as From<usize>>::from(res.right - res.left) * 1.0e10.into());
+		res.weights[m - res.left] = omega
+			/ (ValueType::from_usize(res.right - res.left).unwrap()
+				* ValueType::from_f64(1.0e10).unwrap());
 
 		// We have one more underflow check we have to perform. This underflow check will be
 		// performed in f64 rather than valuetype since this is a numeric method.
@@ -276,7 +279,7 @@ where
 				} else {
 					t = j;
 					res.right = j + res.left;
-					res.weights.resize(res.right - res.left, 0.0.into());
+					res.weights.resize(res.right - res.left, ValueType::zero());
 
 					break;
 				}

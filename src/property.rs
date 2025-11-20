@@ -1,5 +1,6 @@
 use std::ops;
 
+use evalexpr::Value;
 use logos::Logos;
 
 use crate::matrix::CheckableNumber;
@@ -136,7 +137,7 @@ impl Property for AtomicProposition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Interval<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	/// A time bound of the form [0, T]
 	TimeBoundedUpper(ValueType),
@@ -153,7 +154,7 @@ where
 
 impl<ValueType> ToString for Interval<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -170,7 +171,7 @@ where
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ProbabilityQueryType<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	/// A simple query that asks the probability
 	SimpleQuery,
@@ -186,7 +187,7 @@ where
 
 impl<ValueType> ToString for ProbabilityQueryType<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -204,7 +205,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub enum StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	/// Evaluates to `true` on all states
 	True,
@@ -233,7 +234,7 @@ where
 
 impl<ValueType> ops::Not for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	type Output = Self;
 
@@ -251,7 +252,7 @@ where
 
 impl<ValueType> ops::BitAnd for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	type Output = Self;
 	fn bitand(self, rhs: Self) -> Self::Output {
@@ -261,7 +262,7 @@ where
 
 impl<ValueType> ops::BitOr for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	type Output = Self;
 	fn bitor(self, rhs: Self) -> Self::Output {
@@ -271,7 +272,7 @@ where
 
 impl<ValueType> ToString for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -306,7 +307,7 @@ where
 
 impl<ValueType> Property for StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	fn is_pctl(&self) -> bool {
 		match self {
@@ -328,7 +329,7 @@ where
 
 impl<ValueType> StateFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	/// Creates lower and upper bound properties, useful for STAMINA.
 	pub fn create_bounds(&self) -> Option<(Self, Self)> {
@@ -413,7 +414,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub enum PathFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	/// If the state formula holds in the next state.
 	Next(Box<StateFormula<ValueType>>),
@@ -429,7 +430,7 @@ where
 
 impl<ValueType> Property for PathFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	fn is_pctl(&self) -> bool {
 		match self {
@@ -449,7 +450,7 @@ where
 
 impl<ValueType> ToString for PathFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	fn to_string(&self) -> String {
 		match self {
@@ -473,7 +474,7 @@ where
 
 impl<ValueType> PathFormula<ValueType>
 where
-	ValueType: CheckableNumber + std::convert::From<f64> + std::convert::From<i64>,
+	ValueType: CheckableNumber + num::FromPrimitive,
 {
 	/// Creates a state formula of type `next`
 	pub fn next(state_formula: &StateFormula<ValueType>) -> Self {
@@ -510,7 +511,7 @@ where
 
 #[cfg(test)]
 mod property_tests {
-	use super::{Interval, PathFormula, StateFormula};
+	use super::{Interval, PathFormula, Property, StateFormula};
 
 	#[test]
 	fn construction_test() {
@@ -529,5 +530,12 @@ mod property_tests {
 	fn negation_test() {
 		// let phi: StateFormula<f64> = StateFormula::AtomicProposition(evalexpr::)
 		unimplemented!();
+	}
+
+	#[test]
+	fn parse_test() {
+		let prop_result = StateFormula::<f64>::parse(&"P=? [true U \"absorbing\"]");
+		assert!(prop_result.is_ok());
+		println!("{}", prop_result.unwrap().to_string());
 	}
 }
