@@ -2,22 +2,14 @@
 
 use std::f64::{self, consts::PI};
 
-use num::{traits::real::Real, Bounded};
+use num::{Bounded, traits::real::Real};
 
 use crate::matrix;
 
 /// A bound from a Fox-Glynn computation.
 pub struct FoxGlynnBound<ValueType>
 where
-	ValueType: matrix::CheckableNumber
-		+ Bounded
-		+ num::FromPrimitive
-		+ std::convert::From<usize>
-		+ std::convert::From<isize>
-		+ Real,
-	usize: From<ValueType>,
-	isize: From<ValueType>,
-	f64: From<ValueType>,
+	ValueType: matrix::CheckableNumber + Bounded + Real,
 {
 	pub left: usize,
 	pub right: usize,
@@ -27,15 +19,7 @@ where
 
 impl<ValueType> Default for FoxGlynnBound<ValueType>
 where
-	ValueType: matrix::CheckableNumber
-		+ Bounded
-		+ num::FromPrimitive
-		+ std::convert::From<usize>
-		+ std::convert::From<isize>
-		+ Real,
-	usize: From<ValueType>,
-	isize: From<ValueType>,
-	f64: From<ValueType>,
+	ValueType: matrix::CheckableNumber + Bounded + Real,
 {
 	fn default() -> Self {
 		Self {
@@ -49,15 +33,7 @@ where
 
 impl<ValueType> FoxGlynnBound<ValueType>
 where
-	ValueType: matrix::CheckableNumber
-		+ Bounded
-		+ num::FromPrimitive
-		+ std::convert::From<usize>
-		+ std::convert::From<isize>
-		+ Real,
-	usize: From<ValueType>,
-	isize: From<ValueType>,
-	f64: From<ValueType>,
+	ValueType: matrix::CheckableNumber + Bounded + Real,
 {
 	/// Finds the left and right truncation points for Fox-Glynn as described in
 	/// https://doi.org/10.1145/42404.42409. During the implementation of this function, we heavily
@@ -81,7 +57,7 @@ where
 		let (mut left, mut right): (isize, isize) = (0, 0);
 
 		// Like the main `fox_glynn` method, we get the mid-point from the value of lambda
-		let m = usize::from(lambda.clone());
+		let m = lambda.to_usize().unwrap();
 
 		// Because we only use tau in underflow checks, we can log it first.
 		let tlog = tau.log2();
@@ -102,11 +78,11 @@ where
 			let b = (one + lambda.recip())
 				* (lambda.recip() * ValueType::from_f64(0.125).unwrap()).exp();
 			let root_lmbda = lambda.sqrt();
-			let mut k: ValueType = <ValueType as From<usize>>::from(4);
+			let mut k: ValueType = ValueType::from_usize(4).unwrap();
 
 			loop {
 				// First, compute a candidate for `left`.
-				left = m as isize - isize::from((k * root_lmbda + p5).ceil());
+				left = m as isize - (k * root_lmbda + p5).ceil().to_isize().unwrap();
 
 				// If the truncation point is negative, then make it zero and terminate the loop.
 				if left.is_negative() {
@@ -162,8 +138,12 @@ where
 			k += one;
 		}
 		// Compute the right bound and determine if it's reliable.
-		right = m_max + isize::from((k * (lambda_max + lambda_max).sqrt() + p5).ceil());
-		let reliability_bound = m_max + isize::from((lambda_max + ValueType::one()) * p5);
+		right = m_max
+			+ (k * (lambda_max + lambda_max).sqrt() + p5)
+				.ceil()
+				.to_isize()
+				.unwrap();
+		let reliability_bound = m_max + ((lambda_max + ValueType::one()) * p5).to_isize().unwrap();
 		if right > reliability_bound {
 			eprintln!(
 				"Right bound unreliable! ({0} > {1})",
@@ -196,7 +176,7 @@ where
 			let i = m as isize - res.left as isize;
 			// Cast it to ValueType early
 			let ir = i as f64;
-			let lambda_f64 = f64::from(lambda);
+			let lambda_f64 = lambda.to_f64().unwrap();
 			// Another magic constant stolen from Storm. This one comes from the fact that
 			// -1 - 1 / (12 * 25) - ln(2 * pi) * 0.5 is roughly equal to -1.922272.
 			let magic_const = -1.922272;
@@ -216,7 +196,9 @@ where
 				-lambda_f64
 			};
 
-			if numeric_result <= tau.into() {
+			let tau_f64 = tau.to_f64().unwrap();
+
+			if numeric_result <= tau_f64 {
 				eprintln!("Underflow in lambda >= 25!");
 			}
 
@@ -226,7 +208,7 @@ where
 				let i = res.right as isize - m as isize;
 				let ir = i as f64;
 				let numeric_result = lnc_m - ir * (ir + 1.0) / (2.0 * lambda_f64);
-				if numeric_result <= tau.into() {
+				if numeric_result <= tau_f64 {
 					eprintln!("Underflow in lambda >= 400!");
 				}
 			}
@@ -240,7 +222,7 @@ where
 	pub fn fox_glynn(lambda: ValueType, epsilon: ValueType) -> Self {
 		assert!(lambda.is_positive());
 		// Start the mid point at the the current value of `lambda`.
-		let m = usize::from(lambda.clone());
+		let m = lambda.to_usize().unwrap();
 
 		let tau = <ValueType as Bounded>::min_value();
 		let mut res = Self::fg_find(lambda, epsilon);
@@ -249,7 +231,7 @@ where
 		// The left side of the weights array is easy to fill in.
 		for j in (1..=m - res.left).rev() {
 			res.weights[j - 1] =
-				<ValueType as From<usize>>::from(j + res.left) / lambda * res.weights[j];
+				ValueType::from_usize(j + res.left).unwrap() / lambda * res.weights[j];
 		}
 
 		// Now we fill in the right side of the array. If lambda < 400, we have a separate case
@@ -260,7 +242,7 @@ where
 			// No danger of underflow, so just compute the weights
 			for j in (m - res.left)..t {
 				res.weights[j + 1] =
-					lambda / <ValueType as From<usize>>::from(j + 1 + res.left) * res.weights[j]
+					lambda / ValueType::from_usize(j + 1 + res.left).unwrap() * res.weights[j]
 			}
 		} else {
 			// Make sure we haven't underflowed
@@ -273,7 +255,7 @@ where
 
 			// Fill the rest of the array
 			for j in (m - res.left)..t {
-				let q = lambda / <ValueType as From<usize>>::from(j + 1 + res.left);
+				let q = lambda / ValueType::from_usize(j + 1 + res.left).unwrap();
 				if res.weights[j] > tau / q {
 					res.weights[j + 1] = q * res.weights[j];
 				} else {

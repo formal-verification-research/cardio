@@ -5,7 +5,7 @@ use crate::poisson::FoxGlynnBound;
 use crate::*;
 
 use bitvec::prelude::*;
-use num::traits::{real::Real, Bounded};
+use num::traits::{Bounded, real::Real};
 use sprs::{CsMat, CsVec};
 
 use self::property::Interval;
@@ -26,7 +26,7 @@ where
 
 pub struct ExplicitModelContext<EntryType>
 where
-	EntryType: CheckableNumber + num::FromPrimitive,
+	EntryType: CheckableNumber,
 {
 	/// Whether the model is in discrete or continuous time
 	discrete_time: bool,
@@ -40,7 +40,7 @@ where
 
 impl<EntryType> ExplicitModelContext<EntryType>
 where
-	EntryType: CheckableNumber + num::FromPrimitive,
+	EntryType: CheckableNumber,
 {
 	/// Returns the number of states in the explicit model
 	pub fn state_count(&self) -> usize {
@@ -51,7 +51,7 @@ where
 /// A struct that contains the program context for a model checker.
 pub struct CheckContext<EntryType>
 where
-	EntryType: CheckableNumber + num::FromPrimitive,
+	EntryType: CheckableNumber,
 {
 	/// The (current) probability distribution over states.
 	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
@@ -75,7 +75,7 @@ where
 
 impl<EntryType> CheckContext<EntryType>
 where
-	EntryType: CheckableNumber + num::FromPrimitive,
+	EntryType: CheckableNumber,
 {
 	/// If there are states for which the precision is relevant.
 	pub fn has_relevant_states(&self) -> bool {
@@ -192,16 +192,7 @@ where
 
 impl<EntryType> CslChecker<EntryType>
 where
-	EntryType: CheckableNumber
-		+ Bounded
-		+ num::FromPrimitive
-		+ std::convert::From<i64>
-		+ std::convert::From<usize>
-		+ std::convert::From<isize>
-		+ Real,
-	usize: From<EntryType>,
-	isize: From<EntryType>,
-	f64: From<EntryType>,
+	EntryType: CheckableNumber + Bounded + Real,
 {
 	/// Computes the transient probabilities for a given context and relevent values. The relevant
 	/// values are the nonzero probabilities and the states who have the labels we care about.
@@ -327,7 +318,7 @@ where
 					// Must be a DTMC and thus the epoch (the time in between steps) must be 1
 					assert!(epoch == EntryType::one());
 					// Update the context's bound with the number of steps.
-					context.time_bound = <EntryType as From<usize>>::from(steps);
+					context.time_bound = EntryType::from_usize(steps).unwrap();
 					// Update relevant values based on the states which satisfy phi.
 					context.update_relevant_states(&phi_label_mask);
 					// Finally, compute transient probabilities
@@ -396,7 +387,7 @@ where
 		(0..=num_epochs)
 			.step_by(epoch_step)
 			.map(|i| {
-				context.time_bound = epoch * <EntryType as From<usize>>::from(i);
+				context.time_bound = epoch * EntryType::from_usize(i).unwrap();
 				let distribution = self.compute_transient(context);
 				context.distribution = distribution.clone();
 				(context.time_bound, distribution)

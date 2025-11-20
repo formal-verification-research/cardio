@@ -25,6 +25,8 @@ pub trait CheckableNumber:
 	+ Zero
 	+ Pow<i32, Output = Self>
 	+ std::fmt::Display
+	+ num::FromPrimitive
+	+ num::ToPrimitive
 {
 }
 

@@ -105,7 +105,7 @@ pub fn parse_interval<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<Interval<ValueType>, String>
 where
-	ValueType: CheckableNumber + num::FromPrimitive,
+	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
 {
 	let first_token = iter.peek();
@@ -184,7 +184,7 @@ pub fn parse_expression<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<StateFormula<ValueType>, String>
 where
-	ValueType: CheckableNumber + num::FromPrimitive,
+	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
 {
 	let mut left = parse_state_formula(iter)?;
@@ -213,7 +213,7 @@ pub fn parse_state_formula<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<StateFormula<ValueType>, String>
 where
-	ValueType: CheckableNumber + num::FromPrimitive,
+	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
 {
 	match iter.next() {
@@ -407,7 +407,7 @@ pub fn parse_path_formula<'a, ValueType, I>(
 	iter: &mut std::iter::Peekable<I>,
 ) -> Result<PathFormula<ValueType>, String>
 where
-	ValueType: CheckableNumber + num::FromPrimitive,
+	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
 {
 	match iter.peek() {
