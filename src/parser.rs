@@ -197,7 +197,7 @@ where
 				left = left & right;
 			}
 			Token::Or => {
-				iter.next(); // Consume the `&`
+				iter.next(); // Consume the `|`
 				// Can use it via De Morgan's Laws via negations
 				let right = parse_state_formula(iter)?;
 				left = left | right;

@@ -5,7 +5,7 @@ use crate::poisson::FoxGlynnBound;
 use crate::*;
 
 use bitvec::prelude::*;
-use num::traits::{Bounded, real::Real};
+use num::traits::{real::Real, Bounded};
 use sprs::{CsMat, CsVec};
 
 use self::property::Interval;
@@ -272,7 +272,7 @@ where
 		for idx in first_iteration..=fg_result.right {
 			// TODO: Figure out the trait constraint to get this to compile.
 			let weight = fg_result.weights[idx - fg_result.left];
-			context.distribution *= model.uniformized_matrix;
+			context.distribution = model.uniformized_matrix * context.distribution;
 			context.distribution += result.map(|x| *x * weight);
 		}
 
