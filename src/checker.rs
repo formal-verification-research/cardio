@@ -5,8 +5,8 @@ use crate::poisson::FoxGlynnBound;
 use crate::*;
 
 use bitvec::prelude::*;
-use num::traits::{real::Real, Bounded};
-use sprs::{CsMat, CsVec};
+use num::traits::{Bounded, real::Real};
+use sprs::{CsMat, CsMatBase, CsVec, CsVecBase};
 
 use self::property::Interval;
 
@@ -27,6 +27,12 @@ where
 pub struct ExplicitModelContext<EntryType>
 where
 	EntryType: CheckableNumber,
+	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
+	for<'r> &'r EntryType: std::ops::Add,
+	CsMatBase<EntryType, usize, Vec<usize>, Vec<usize>, Vec<EntryType>>: std::ops::Mul<
+			CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+			Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+		>,
 {
 	/// Whether the model is in discrete or continuous time
 	discrete_time: bool,
@@ -41,6 +47,12 @@ where
 impl<EntryType> ExplicitModelContext<EntryType>
 where
 	EntryType: CheckableNumber,
+	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
+	for<'r> &'r EntryType: std::ops::Add,
+	CsMatBase<EntryType, usize, Vec<usize>, Vec<usize>, Vec<EntryType>>: std::ops::Mul<
+			CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+			Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+		>,
 {
 	/// Returns the number of states in the explicit model
 	pub fn state_count(&self) -> usize {
@@ -52,6 +64,8 @@ where
 pub struct CheckContext<EntryType>
 where
 	EntryType: CheckableNumber,
+	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
+	for<'r> &'r EntryType: std::ops::Add,
 {
 	/// The (current) probability distribution over states.
 	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
@@ -76,6 +90,12 @@ where
 impl<EntryType> CheckContext<EntryType>
 where
 	EntryType: CheckableNumber,
+	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
+	for<'r> &'r EntryType: std::ops::Add,
+	CsMatBase<EntryType, usize, Vec<usize>, Vec<usize>, Vec<EntryType>>: std::ops::Mul<
+			CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+			Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+		>,
 {
 	/// If there are states for which the precision is relevant.
 	pub fn has_relevant_states(&self) -> bool {
@@ -193,6 +213,12 @@ where
 impl<EntryType> CslChecker<EntryType>
 where
 	EntryType: CheckableNumber + Bounded + Real,
+	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
+	for<'r> &'r EntryType: std::ops::Add,
+	CsMatBase<EntryType, usize, Vec<usize>, Vec<usize>, Vec<EntryType>>: std::ops::Mul<
+			CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+			Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+		>,
 {
 	/// Computes the transient probabilities for a given context and relevent values. The relevant
 	/// values are the nonzero probabilities and the states who have the labels we care about.
