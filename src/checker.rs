@@ -29,10 +29,7 @@ where
 	EntryType: CheckableNumber,
 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
 	for<'r> &'r EntryType: std::ops::Add,
-	CsMatBase<EntryType, usize, Vec<usize>, Vec<usize>, Vec<EntryType>>: std::ops::Mul<
-			CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-			Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-		>,
+	for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// Whether the model is in discrete or continuous time
 	discrete_time: bool,
@@ -49,10 +46,7 @@ where
 	EntryType: CheckableNumber,
 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
 	for<'r> &'r EntryType: std::ops::Add,
-	CsMatBase<EntryType, usize, Vec<usize>, Vec<usize>, Vec<EntryType>>: std::ops::Mul<
-			CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-			Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-		>,
+	for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// Returns the number of states in the explicit model
 	pub fn state_count(&self) -> usize {
@@ -66,6 +60,7 @@ where
 	EntryType: CheckableNumber,
 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
 	for<'r> &'r EntryType: std::ops::Add,
+	for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// The (current) probability distribution over states.
 	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
@@ -92,10 +87,7 @@ where
 	EntryType: CheckableNumber,
 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
 	for<'r> &'r EntryType: std::ops::Add,
-	CsMatBase<EntryType, usize, Vec<usize>, Vec<usize>, Vec<EntryType>>: std::ops::Mul<
-			CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-			Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-		>,
+	for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// If there are states for which the precision is relevant.
 	pub fn has_relevant_states(&self) -> bool {
@@ -215,10 +207,7 @@ where
 	EntryType: CheckableNumber + Bounded + Real,
 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
 	for<'r> &'r EntryType: std::ops::Add,
-	CsMatBase<EntryType, usize, Vec<usize>, Vec<usize>, Vec<EntryType>>: std::ops::Mul<
-			CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-			Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-		>,
+	for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// Computes the transient probabilities for a given context and relevent values. The relevant
 	/// values are the nonzero probabilities and the states who have the labels we care about.
@@ -274,17 +263,15 @@ where
 			for i in 0..fg_result.left - 1 {
 				// We use this operation to take advantage of the MulAssign trait provided by the
 				// CsVecI type in the sprs crate.
-				// TODO: Figure out the trait constraint to get this to compile.
-				result = model.uniformized_matrix * result;
+				result = &model.uniformized_matrix * &result;
 				// Unfortunately, I don't believe that there is an optimizable version of AddAssign
-				result = result + context.add_vec;
+				result += context.add_vec.clone();
 			}
 		} else if self.use_mixed_poisson {
 			// If using mixed poisson probabilities we have to scale the vector by the
 			// uniformization rate and add the values each iteration.
 			for i in 0..fg_result.left - 1 {
-				// TODO: Figure out the trait constraint to get this to compile.
-				context.distribution = model.uniformized_matrix * context.distribution;
+				context.distribution = &model.uniformized_matrix * &context.distribution;
 				context.distribution += result.map(|val| *val / model.epoch);
 			}
 
@@ -296,9 +283,8 @@ where
 
 		// In between the left and right fox glynn points, compute, scale and add results
 		for idx in first_iteration..=fg_result.right {
-			// TODO: Figure out the trait constraint to get this to compile.
 			let weight = fg_result.weights[idx - fg_result.left];
-			context.distribution = model.uniformized_matrix * context.distribution;
+			context.distribution = &model.uniformized_matrix * &context.distribution;
 			context.distribution += result.map(|x| *x * weight);
 		}
 

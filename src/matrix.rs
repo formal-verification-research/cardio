@@ -27,6 +27,9 @@ pub trait CheckableNumber:
 	+ std::fmt::Display
 	+ num::FromPrimitive
 	+ num::ToPrimitive
+	+ std::marker::Send
+	+ std::marker::Sync
+	+ sprs::MulAcc
 {
 }
 
