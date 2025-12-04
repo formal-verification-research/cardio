@@ -508,7 +508,7 @@ where
 
 #[cfg(test)]
 mod property_tests {
-	use super::{Interval, PathFormula, Property, StateFormula};
+	use super::{Interval, PathFormula, ProbabilityQueryType, Property, StateFormula};
 
 	#[test]
 	fn construction_test() {
@@ -517,22 +517,30 @@ mod property_tests {
 		let eventually_abs: PathFormula<f64> =
 			PathFormula::eventually(Interval::<_>::TimeUnbounded, &phi);
 		let globally_not_abs: PathFormula<f64> = PathFormula::globally(&neg_phi);
+		let p: StateFormula<f64> = StateFormula::TransientQuery(
+			ProbabilityQueryType::SimpleQuery,
+			Box::new(eventually_abs.clone()),
+		);
 		println!("Property 1: {}", phi.to_string());
 		println!("Property 2: {}", neg_phi.to_string());
 		println!("Property 3: {}", eventually_abs.to_string());
 		println!("Property 4: {}", globally_not_abs.to_string());
+		println!("Property 5: {}", p.to_string());
 	}
 
-	#[test]
-	fn negation_test() {
-		// let phi: StateFormula<f64> = StateFormula::AtomicProposition(evalexpr::)
-		unimplemented!();
-	}
+	// #[test]
+	// fn negation_test() {
+	// let phi: StateFormula<f64> = StateFormula::AtomicProposition(evalexpr::)
+	//unimplemented!();
+	//}
 
 	#[test]
 	fn parse_test() {
 		let prop_result = StateFormula::<f64>::parse(&"P=? [true U \"absorbing\"]");
+		match &prop_result {
+			Ok(prop) => println!("{}", prop.to_string()),
+			Err(err) => println!("Got error: {}", err),
+		}
 		assert!(prop_result.is_ok());
-		println!("{}", prop_result.unwrap().to_string());
 	}
 }

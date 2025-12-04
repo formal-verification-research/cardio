@@ -410,7 +410,7 @@ mod matrix_tests {
 		// Iterate in the reverse direction
 		for (row, col) in (1..=150).rev().zip((1..=150).rev()) {
 			let entry = (row + 1).to_f64().unwrap() / col.to_f64().unwrap();
-			eprintln!("{row},{col}:{entry}");
+			// eprintln!("{row},{col}:{entry}");
 			mat_builder.insert(row, col, entry);
 			num_inserted += 1;
 			assert_eq!(mat_builder.len(), num_inserted);
@@ -418,7 +418,7 @@ mod matrix_tests {
 		// Check in the forward direction
 		for (row, col) in (1..=150).zip(1..=150) {
 			let entry = (row + 1).to_f64().unwrap() / col.to_f64().unwrap();
-			eprintln!("{row},{col}:{entry}");
+			// eprintln!("{row},{col}:{entry}");
 			assert_eq!(mat_builder.get_value(row, col).unwrap(), entry);
 		}
 	}
