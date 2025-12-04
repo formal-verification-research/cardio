@@ -418,3 +418,13 @@ where
 		unimplemented!();
 	}
 }
+
+#[cfg(test)]
+mod checker_tests {
+	use super::*;
+
+	#[test]
+	fn some_test() {
+		// TODO
+	}
+}
