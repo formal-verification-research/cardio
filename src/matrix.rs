@@ -1,8 +1,10 @@
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
-use num::{Rational32, Rational64, Zero, pow::Pow};
+use num::{pow::Pow, Rational32, Rational64, Zero};
 use sprs::CsMat;
 use vector_map::VecMap;
+
+use crate::{checker::ExplicitModelContext, labels::Labels};
 
 /// A trait representing what we need for a matrix entry
 pub trait CheckableNumber:
@@ -67,6 +69,19 @@ where
 	fn to_inf_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>);
 	/// Creates a uniformized matrix, suitable for model checking.
 	fn to_unif_matrix(&self) -> (EntryType, sprs::CsMat<EntryType>);
+	/// Creates an explicit model context, given a labelling structure
+	fn to_model_context(
+		&self,
+		labels: &Labels,
+		discrete_time: bool,
+	) -> ExplicitModelContext<EntryType> {
+		let (epoch, mat) = if discrete_time {
+			(EntryType::one(), self.to_sparse_matrix())
+		} else {
+			self.to_unif_matrix()
+		};
+		ExplicitModelContext::new(discrete_time, labels, &mat, epoch)
+	}
 }
 
 /// A sparse matrix builder that allows for random access and updating and is optimized for VAS and
