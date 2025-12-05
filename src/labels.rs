@@ -1,5 +1,6 @@
 use bitvec::prelude::*;
 
+#[derive(Clone, Debug)]
 pub struct Labels {
 	/// Labels are stored as strings in a vector, with the index in the array representing the
 	/// label's index in the bitvec for the labelling of each state. The number stored with the
@@ -28,6 +29,17 @@ impl Labels {
 	pub fn with_absorbing() -> Self {
 		let mut labelling = Self {
 			label_names: vec![("absorbing".to_string(), 0)],
+			state_labelling: Some(Vec::new()),
+		};
+		labelling.add_label_to_state(0, 0);
+		labelling
+	}
+
+	/// Creates a labelling structure with both an absorbing label, and a satisfying label. This is
+	/// useful for manual matrix construction where cardio is not aware of state values.
+	pub fn with_abs_and_sat() -> Self {
+		let mut labelling = Self {
+			label_names: vec![("absorbing".to_string(), 0), ("satisfying".to_string(), 1)],
 			state_labelling: Some(Vec::new()),
 		};
 		labelling.add_label_to_state(0, 0);
@@ -121,6 +133,21 @@ impl Labels {
 		} else {
 			false
 		}
+	}
+
+	/// Creates a bitvector of relevant states given a label bitmask
+	pub fn create_relevant(&self, label_bitmask: &BitVec, num_states: usize) -> BitVec {
+		let sat_iterator = (0..=num_states).map(|idx| self.state_has_labels(idx, label_bitmask));
+		BitVec::from_iter(sat_iterator)
+	}
+
+	/// Creates a bitmask from a set of label strings.
+	pub fn create_label_bitmask(&self, label_strings: Vec<String>) -> BitVec {
+		let label_iterator = self
+			.label_names
+			.iter()
+			.map(|(label_name, _states_per_label)| label_strings.contains(label_name));
+		BitVec::from_iter(label_iterator)
 	}
 }
 
