@@ -67,9 +67,9 @@ where
 pub struct CheckContext<EntryType>
 where
 	EntryType: CheckableNumber,
-	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	for<'r> &'r EntryType: std::ops::Add,
-	for<'r> &'r EntryType: std::ops::Mul,
+	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
+	// for<'r> &'r EntryType: std::ops::Add,
+	// for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// The (current) probability distribution over states.
 	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
@@ -94,9 +94,9 @@ where
 impl<EntryType> CheckContext<EntryType>
 where
 	EntryType: CheckableNumber,
-	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	for<'r> &'r EntryType: std::ops::Add,
-	for<'r> &'r EntryType: std::ops::Mul,
+	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
+	// for<'r> &'r EntryType: std::ops::Add,
+	// for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// Creates a check context with an initial distribution, where the initial state index is 1,
 	/// given a model context, time bound, and relevant states
@@ -235,6 +235,7 @@ where
 {
 	qualitative: bool,
 	use_mixed_poisson: bool,
+	// TODO: Need to figure out another way to parametrize this
 	placeholder: EntryType,
 }
 
@@ -242,9 +243,17 @@ impl<EntryType> CslChecker<EntryType>
 where
 	EntryType: CheckableNumber + Bounded + Real,
 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	for<'r> &'r EntryType: std::ops::Add,
-	for<'r> &'r EntryType: std::ops::Mul,
+	// for<'r> &'r EntryType: std::ops::Add,
+	// for<'r> &'r EntryType: std::ops::Mul,
 {
+	pub fn new(qualitative: bool, use_mixed_poisson: bool) -> Self {
+		Self {
+			qualitative,
+			use_mixed_poisson,
+			placeholder: EntryType::zero(),
+		}
+	}
+
 	/// Computes the transient probabilities for a given context and relevent values. The relevant
 	/// values are the nonzero probabilities and the states who have the labels we care about.
 	pub fn compute_transient(&self, context: &mut CheckContext<EntryType>) -> CsVec<EntryType> {
@@ -452,6 +461,18 @@ where
 		num_threads: usize,
 	) -> Vec<(EntryType, CsVec<EntryType>)> {
 		unimplemented!();
+	}
+}
+
+impl<EntryType> Default for CslChecker<EntryType>
+where
+	EntryType: CheckableNumber + Bounded + Real,
+	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
+	// for<'r> &'r EntryType: std::ops::Add,
+	// for<'r> &'r EntryType: std::ops::Mul,
+{
+	fn default() -> Self {
+		Self::new(true, true)
 	}
 }
 

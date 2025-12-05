@@ -2,6 +2,7 @@
 #[pyo3::pymodule]
 mod cardiopy {
 	use crate::{
+		checker::{CheckContext, CslChecker},
 		labels::Labels,
 		matrix::{OptimalSprsMatBuilder, SprsMatBuilder},
 	};
@@ -35,7 +36,7 @@ mod cardiopy {
 			self.labelling.add_label_to_state(1, state_index)
 		}
 
-		pub fn build_matrix_and_get_bounds(&self) -> (f64, f64) {
+		pub fn build_matrix_and_get_bounds(&self, time_bound: f64) -> (f64, f64) {
 			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
 			let relevant_bitmask = self
 				.labelling
@@ -44,7 +45,14 @@ mod cardiopy {
 			let relevant_states = self
 				.labelling
 				.create_relevant(&relevant_bitmask, state_count);
-
+			let mut check_context: CheckContext<f64> = CheckContext::initialize_with_abs(
+				&model_context,
+				time_bound,
+				1e-99,
+				relevant_states.clone(),
+				relevant_states.clone(),
+			);
+			// let mut csl_checker: CslChecker<f64> = CslChecker::default();
 			unimplemented!();
 		}
 	}
