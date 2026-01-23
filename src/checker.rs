@@ -1,12 +1,13 @@
-use std::{ops::Deref, sync::RwLock};
+use std::ops::Add;
+use std::sync::RwLock;
 
 use crate::matrix::*;
 use crate::poisson::FoxGlynnBound;
 use crate::*;
 
 use bitvec::prelude::*;
-use num::traits::{real::Real, Bounded};
-use sprs::{CsMat, CsMatBase, CsVec, CsVecBase};
+use num::traits::{Bounded, real::Real};
+use sprs::{CsMat, CsVec, CsVecBase};
 
 use self::property::Interval;
 
@@ -67,9 +68,6 @@ where
 pub struct CheckContext<EntryType>
 where
 	EntryType: CheckableNumber,
-	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	// for<'r> &'r EntryType: std::ops::Add,
-	// for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// The (current) probability distribution over states.
 	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
@@ -94,9 +92,6 @@ where
 impl<EntryType> CheckContext<EntryType>
 where
 	EntryType: CheckableNumber,
-	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	// for<'r> &'r EntryType: std::ops::Add,
-	// for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// Creates a check context with an initial distribution, where the initial state index is 1,
 	/// given a model context, time bound, and relevant states
@@ -242,9 +237,10 @@ where
 impl<EntryType> CslChecker<EntryType>
 where
 	EntryType: CheckableNumber + Bounded + Real,
-	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	// for<'r> &'r EntryType: std::ops::Add,
-	// for<'r> &'r EntryType: std::ops::Mul,
+	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::Add<
+	// 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+	// 	Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+	// >,
 {
 	pub fn new(qualitative: bool, use_mixed_poisson: bool) -> Self {
 		Self {
@@ -310,14 +306,15 @@ where
 				// CsVecI type in the sprs crate.
 				result = &model.uniformized_matrix * &result;
 				// Unfortunately, I don't believe that there is an optimizable version of AddAssign
-				result += context.add_vec.clone();
+				result = result + context.add_vec.clone();
 			}
 		} else if self.use_mixed_poisson {
 			// If using mixed poisson probabilities we have to scale the vector by the
 			// uniformization rate and add the values each iteration.
 			for i in 0..fg_result.left - 1 {
 				context.distribution = &model.uniformized_matrix * &context.distribution;
-				context.distribution += result.map(|val| *val / model.epoch);
+				context.distribution =
+					context.distribution.clone() + result.map(|val| *val / model.epoch);
 			}
 
 			// scale values by total fox-glynn weight
@@ -330,7 +327,7 @@ where
 		for idx in first_iteration..=fg_result.right {
 			let weight = fg_result.weights[idx - fg_result.left];
 			context.distribution = &model.uniformized_matrix * &context.distribution;
-			context.distribution += result.map(|x| *x * weight);
+			context.distribution = &context.distribution + &result.map(|x| *x * weight);
 		}
 
 		// Scale the vector by total weight
@@ -467,9 +464,10 @@ where
 impl<EntryType> Default for CslChecker<EntryType>
 where
 	EntryType: CheckableNumber + Bounded + Real,
-	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	// for<'r> &'r EntryType: std::ops::Add,
-	// for<'r> &'r EntryType: std::ops::Mul,
+	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::Add<
+	// 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+	// 	Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+	// >,
 {
 	fn default() -> Self {
 		Self::new(true, true)

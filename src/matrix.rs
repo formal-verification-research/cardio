@@ -1,6 +1,7 @@
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
-use num::{pow::Pow, Rational32, Rational64, Zero};
+use num::{Rational32, Rational64, Zero, pow::Pow};
+use ref_ops::RefAdd;
 use sprs::CsMat;
 use vector_map::VecMap;
 
@@ -32,6 +33,7 @@ pub trait CheckableNumber:
 	+ std::marker::Send
 	+ std::marker::Sync
 	+ sprs::MulAcc
+	+ RefAdd
 {
 }
 

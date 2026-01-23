@@ -14,6 +14,7 @@ sprs = "0.11.3"
 vector-map = "1.0.2"
 # Python binding generator so we don't have to manually create them
 pyo3 = { version = "0.27", features = ["auto-initialize"] }
+ref-ops = "0.2.5"
 
 [lib]
 name = "cardio"
