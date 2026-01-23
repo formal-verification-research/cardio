@@ -5,6 +5,7 @@ mod cardiopy {
 		checker::{CheckContext, CslChecker},
 		labels::Labels,
 		matrix::{OptimalSprsMatBuilder, SprsMatBuilder},
+		property::*,
 	};
 	use pyo3::prelude::*;
 
@@ -53,7 +54,37 @@ mod cardiopy {
 				relevant_states.clone(),
 			);
 			let mut csl_checker: CslChecker = CslChecker::default();
-			unimplemented!();
+			let interval = Interval::TimeBoundedUpper(time_bound);
+			// let property = StateFormula::TransientQuery(
+			// 	ProbabilityQueryType::SimpleQuery,
+			// 	Box::new(PathFormula::Until(
+			// 		Box::new(StateFormula::True),
+			// 		interval,
+			// 		Box::new(StateFormula::StringLabel("satisfying".to_string())),
+			// 	)),
+			// );
+			// let (lower_bound, upper_bound) = property.create_bounds().unwrap();
+			let distribution = csl_checker.compute_until(
+				&mut check_context,
+				interval,
+				relevant_bitmask.clone(),
+				relevant_bitmask.clone(),
+			);
+
+			let (mut lower_bound, mut upper_bound): (f64, f64) = (0.0, 0.0);
+			for (state_id, probability) in distribution.iter() {
+				// if the state has the absorbing or satisfying label, then it can go
+				// to the upper_bound.
+				if self.labelling.state_has_labels(state_id, &relevant_bitmask) {
+					upper_bound += probability;
+					// If it does NOT have the absorbing label, it can go to the lower
+					// bound
+					if !self.labelling.state_has_label(state_id, 0) {
+						lower_bound += probability;
+					}
+				}
+			}
+			(lower_bound, upper_bound)
 		}
 	}
 }

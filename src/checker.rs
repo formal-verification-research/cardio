@@ -453,6 +453,7 @@ mod checker_tests {
 
 	#[test]
 	fn some_test() {
+		let mut checker = CslChecker::default();
 		// TODO
 	}
 }
