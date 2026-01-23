@@ -1,6 +1,6 @@
 // Python bindings
 #[pyo3::pymodule]
-mod cardiopy {
+mod cardio {
 	use crate::{
 		checker::{CheckContext, CslChecker},
 		labels::Labels,
