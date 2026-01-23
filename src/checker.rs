@@ -16,9 +16,9 @@ pub trait CtmcTransMat {
 	fn uniformize(rate_mat: Self) -> Self;
 }
 
-impl<EntryType> CtmcTransMat for sprs::CsMat<EntryType>
+impl CtmcTransMat for sprs::CsMat<f64>
 where
-	EntryType: num::Num + Clone,
+	f64: num::Num + Clone,
 {
 	fn uniformize(rate_mat: Self) -> Self {
 		unimplemented!();
@@ -26,29 +26,29 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct ExplicitModelContext<EntryType>
+pub struct ExplicitModelContext
 where
-	EntryType: CheckableNumber,
+	f64: CheckableNumber,
 {
 	/// Whether the model is in discrete or continuous time
 	discrete_time: bool,
 	/// The state and transition labelling
 	labels: labels::Labels,
 	/// The uniformized DTMC if a CTMC or the probability matrix if it is a DTMC.
-	uniformized_matrix: CsMat<EntryType>,
+	uniformized_matrix: CsMat<f64>,
 	/// The epoch time. If a DTMC, this should be one.
-	epoch: EntryType,
+	epoch: f64,
 }
 
-impl<EntryType> ExplicitModelContext<EntryType>
+impl ExplicitModelContext
 where
-	EntryType: CheckableNumber,
+	f64: CheckableNumber,
 {
 	pub fn new(
 		discrete_time: bool,
 		labels: &labels::Labels,
-		uniformized_matrix: &CsMat<EntryType>,
-		epoch: EntryType,
+		uniformized_matrix: &CsMat<f64>,
+		epoch: f64,
 	) -> Self {
 		Self {
 			discrete_time,
@@ -65,47 +65,40 @@ where
 }
 
 /// A struct that contains the program context for a model checker.
-pub struct CheckContext<EntryType>
-where
-	EntryType: CheckableNumber,
-{
+pub struct CheckContext {
 	/// The (current) probability distribution over states.
-	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
-	distribution: CsVec<EntryType>,
+	/// TODO: should this be a Vec rather than a sparse vector?
+	distribution: CsVec<f64>,
 	/// The model to be checked, including the uniformization matrix as well as the labelling and
 	/// the epoch
-	model_context: RwLock<ExplicitModelContext<EntryType>>,
+	model_context: RwLock<ExplicitModelContext>,
 	/// The time bound to compute probabilities to.
-	time_bound: EntryType,
+	time_bound: f64,
 	/// The numerical precision
-	epsilon: EntryType,
+	epsilon: f64,
 	/// The states for which we perform model checking
 	checked_values: BitVec,
 	/// The value we add during the self multiplication
-	add_vec: CsVec<EntryType>,
+	add_vec: CsVec<f64>,
 	/// The states for which precision is relevant
 	relevant_states: BitVec,
 	/// The precision to which we check
-	precision: EntryType,
+	precision: f64,
 }
 
-impl<EntryType> CheckContext<EntryType>
-where
-	EntryType: CheckableNumber,
-{
+impl CheckContext {
 	/// Creates a check context with an initial distribution, where the initial state index is 1,
 	/// given a model context, time bound, and relevant states
 	pub fn initialize_with_abs(
-		model_context: &ExplicitModelContext<EntryType>,
-		time_bound: EntryType,
-		precision: EntryType,
+		model_context: &ExplicitModelContext,
+		time_bound: f64,
+		precision: f64,
 		relevant_states: BitVec,
 		checked_values: BitVec,
 	) -> Self {
 		let num_states = model_context.uniformized_matrix.cols();
 		// The distribution starts with 100% of the probability at state 1, i.e., the initial state
-		let distribution: CsVec<EntryType> =
-			CsVec::new(num_states, vec![1], vec![EntryType::one()]);
+		let distribution: CsVec<f64> = CsVec::new(num_states, vec![1], vec![1.0]);
 		// epsilon and precision start at the same value, but epsilon is modified throughout model
 		// checking, whereas precision remains the same.
 		Self {
@@ -131,15 +124,15 @@ where
 	}
 
 	/// Get the epoch from the model with the read lock only taken in the context of this function.
-	pub fn epoch(&self) -> EntryType {
+	pub fn epoch(&self) -> f64 {
 		self.model_context.read().unwrap().epoch
 	}
 
 	/// Checks to see if we've reached the desired precision for all of the relevant states. This
 	/// function also updates the epsilon value thus it takes a `&mut self`.
-	pub fn precision_reached(&mut self, intermediate_result: &CsVec<EntryType>) -> bool {
+	pub fn precision_reached(&mut self, intermediate_result: &CsVec<f64>) -> bool {
 		// The element for new_epsilon when the result is zero
-		let zero_epsilon = self.epsilon * EntryType::from_f64(0.1).unwrap();
+		let zero_epsilon = self.epsilon * 0.1;
 		// Iterate over all relevant state indecies, take the results and map them to a candidate
 		// next epsilon. We take the minimum of these as our new epsilon. If our new epsilon is
 		// lower than the old epsilon then we can terminate, otherwise, continue.
@@ -177,7 +170,7 @@ where
 	/// distribution, but is not strictly necessary for, e.g., the second step in a phi U psi
 	/// computation.
 	pub fn is_valid_distribution(&self) -> bool {
-		self.distribution.l1_norm().is_one()
+		self.distribution.l1_norm() == 1.0
 	}
 
 	/// Updates the relevant_states vector with the states that have state labels whose indecies
@@ -191,7 +184,7 @@ where
 		let state_count = model.state_count();
 		self.relevant_states = BitVec::with_capacity(state_count);
 		for (idx, &val) in self.distribution.iter() {
-			if !val.is_zero() && model.labels.state_has_labels(idx, &label_indecies) {
+			if val != 0.0 && model.labels.state_has_labels(idx, &label_indecies) {
 				self.relevant_states.set(idx, true);
 			}
 		}
@@ -224,47 +217,34 @@ where
 }
 
 /// A CSL or PCTL model checker.
-pub struct CslChecker<EntryType>
-where
-	EntryType: num::Num + Clone,
-{
+pub struct CslChecker {
 	qualitative: bool,
 	use_mixed_poisson: bool,
-	// TODO: Need to figure out another way to parametrize this
-	placeholder: EntryType,
 }
 
-impl<EntryType> CslChecker<EntryType>
-where
-	EntryType: CheckableNumber + Bounded + Real,
-	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::Add<
-	// 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-	// 	Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-	// >,
-{
+impl CslChecker {
 	pub fn new(qualitative: bool, use_mixed_poisson: bool) -> Self {
 		Self {
 			qualitative,
 			use_mixed_poisson,
-			placeholder: EntryType::zero(),
 		}
 	}
 
 	/// Computes the transient probabilities for a given context and relevent values. The relevant
 	/// values are the nonzero probabilities and the states who have the labels we care about.
-	pub fn compute_transient(&self, context: &mut CheckContext<EntryType>) -> CsVec<EntryType> {
+	pub fn compute_transient(&self, context: &mut CheckContext) -> CsVec<f64> {
 		// TODO: more graceful handling if cannot read
 		let model = context.model_context.read().unwrap();
 		let lambda = model.epoch * context.time_bound;
 		// Return the initial distribution if no epochs pass.
-		if lambda.is_zero() {
+		if lambda == 0.0 {
 			return context.distribution.clone();
 		}
 		let mut fg_result = FoxGlynnBound::fox_glynn(lambda, context.epsilon);
 
 		if self.use_mixed_poisson {
 			let (mut left, mut right): (usize, usize) = (0, fg_result.weights.len() - 1);
-			let (mut sum_left, mut sum_right) = (EntryType::zero(), EntryType::zero());
+			let (mut sum_left, mut sum_right) = (0.0, 0.0);
 			while left <= right {
 				if fg_result.weights[left] < fg_result.weights[right] {
 					sum_left += fg_result.weights[left];
@@ -303,7 +283,7 @@ where
 		if !self.use_mixed_poisson && fg_result.left > 1 {
 			for i in 0..fg_result.left - 1 {
 				// We use this operation to take advantage of the MulAssign trait provided by the
-				// CsVecI type in the sprs crate.
+				// CsVec<f64>I type in the sprs crate.
 				result = &model.uniformized_matrix * &result;
 				// Unfortunately, I don't believe that there is an optimizable version of AddAssign
 				result = result + context.add_vec.clone();
@@ -335,7 +315,7 @@ where
 		result
 	}
 
-	pub fn steady_state(&self, context: &mut CheckContext<EntryType>) -> CsVec<EntryType> {
+	pub fn steady_state(&self, context: &mut CheckContext) -> CsVec<f64> {
 		unimplemented!();
 	}
 
@@ -347,11 +327,11 @@ where
 	/// be called.
 	pub fn compute_until(
 		&self,
-		context: &mut CheckContext<EntryType>,
-		bound: Interval<EntryType>,
+		context: &mut CheckContext,
+		bound: Interval,
 		phi_label_mask: BitVec,
 		psi_label_mask: BitVec,
-	) -> CsVec<EntryType> {
+	) -> CsVec<f64> {
 		let epoch = context.epoch();
 		// Loop until we've reached the desired termination.
 		loop {
@@ -370,9 +350,9 @@ where
 					// take, since it will be a DTMC.
 
 					// Must be a DTMC and thus the epoch (the time in between steps) must be 1
-					assert!(epoch == EntryType::one());
+					assert!(epoch == 1.0);
 					// Update the context's bound with the number of steps.
-					context.time_bound = EntryType::from_usize(steps).unwrap();
+					context.time_bound = steps as f64;
 					// Update relevant values based on the states which satisfy phi.
 					context.update_relevant_states(&phi_label_mask);
 					// Finally, compute transient probabilities
@@ -431,17 +411,17 @@ where
 	/// size. The return value is a vector of distributions with their time-steps.
 	pub fn distribution_timeline(
 		&self,
-		context: &mut CheckContext<EntryType>,
+		context: &mut CheckContext,
 		num_epochs: usize,
 		epoch_step: usize,
-	) -> Vec<(EntryType, CsVec<EntryType>)> {
+	) -> Vec<(f64, CsVec<f64>)> {
 		let epoch = context.epoch();
 		// Iteratively compute the intermediate distributions at the given granularity, collecting
 		// the intermediate distributions into a vector and then returning them.
 		(0..=num_epochs)
 			.step_by(epoch_step)
 			.map(|i| {
-				context.time_bound = epoch * EntryType::from_usize(i).unwrap();
+				context.time_bound = epoch * (i as f64);
 				let distribution = self.compute_transient(context);
 				context.distribution = distribution.clone();
 				(context.time_bound, distribution)
@@ -452,23 +432,16 @@ where
 	/// A parallelized version of `distribution_timeline()`.
 	pub fn distribution_timeline_concurrent(
 		&self,
-		context: &mut CheckContext<EntryType>,
+		context: &mut CheckContext,
 		num_epochs: usize,
 		epoch_step: usize,
 		num_threads: usize,
-	) -> Vec<(EntryType, CsVec<EntryType>)> {
+	) -> Vec<(f64, CsVec<f64>)> {
 		unimplemented!();
 	}
 }
 
-impl<EntryType> Default for CslChecker<EntryType>
-where
-	EntryType: CheckableNumber + Bounded + Real,
-	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::Add<
-	// 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-	// 	Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
-	// >,
-{
+impl Default for CslChecker {
 	fn default() -> Self {
 		Self::new(true, true)
 	}

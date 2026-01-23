@@ -10,7 +10,7 @@ mod cardiopy {
 
 	#[pyclass]
 	pub struct QuantitativeReachabilityFinder {
-		matrix_builder: OptimalSprsMatBuilder<f64>,
+		matrix_builder: OptimalSprsMatBuilder,
 		labelling: Labels,
 	}
 
@@ -45,14 +45,14 @@ mod cardiopy {
 			let relevant_states = self
 				.labelling
 				.create_relevant(&relevant_bitmask, state_count);
-			let mut check_context: CheckContext<f64> = CheckContext::initialize_with_abs(
+			let mut check_context: CheckContext = CheckContext::initialize_with_abs(
 				&model_context,
 				time_bound,
 				1e-99,
 				relevant_states.clone(),
 				relevant_states.clone(),
 			);
-			let mut csl_checker: CslChecker<f64> = CslChecker::default();
+			let mut csl_checker: CslChecker = CslChecker::default();
 			unimplemented!();
 		}
 	}
