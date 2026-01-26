@@ -9,14 +9,16 @@ class Transition:
 		self.update = update
 		self.needed = needed
 		if needed is None:
-			self.needed = np.zeros(self.update.size)
+			self.needed = np.zeros(self.update.shape)
 		self.rate_fn = rate_fn
 
 	def get_update(self, cur_state: np.matrix):
-		if (cur_state < self.needed).any() and (cur_state + self.update < 0).any():
+		doesnt_have_needed = (cur_state < self.needed).T.any()
+		leads_outside_first_orthant = ((cur_state + self.update).T < 0).any()
+		if doesnt_have_needed or leads_outside_first_orthant:
 			return None
 		else:
-			(cur_state + self.update, self.rate_fn(cur_state))
+			return (cur_state + self.update, self.rate_fn(cur_state))
 
 class Model:
 	def __init__(self, init_state, transitions, var_bound, sat_predicate):
@@ -27,7 +29,8 @@ class Model:
 
 	def next_states(self, state):
 		updates = [transition.get_update(state) for transition in self.transitions]
-		return [update for update in updates if update is not None and (update[0] > self.var_bound).all()]
+		print(updates)
+		return [update for update in updates if update is not None and (update[0] <= self.var_bound).all()]
 
 	def check_cardio_and_storm(self, time_bound):
 		next_available_index = 2 # absorbing is 0 init is 1
@@ -40,35 +43,42 @@ class Model:
 
 		sat_indecies = []
 
+		state_count = 1
+
 		while len(queue) > 0:
 			cur_state = queue.popleft()
 			cur_state_tuple = tuple(cur_state.T.tolist()[0])
+			print(f"Dequeued state {cur_state_tuple}")
 			cur_idx = state_to_id[tuple(cur_state_tuple)]
 			updates = self.next_states(cur_state)
+			print("updates:", updates)
 			for next_state, rate in updates:
+				next_tuple = tuple(next_state.T.tolist()[0])
 				next_idx = -1
-				if tuple(next_state) in state_to_id:
-					next_idx = state_to_id[tuple(next_state)]
+				if next_tuple in state_to_id:
+					next_idx = state_to_id[next_tuple]
 				else:
 					# State is new
-					state_to_id[tuple(next_state)] = next_available_index
+					state_to_id[next_tuple] = next_available_index
 					next_idx = next_available_index
+					state_count += 1
 					# Check if satisfying
 					if self.sat_predicate(next_state):
 						cardio_rf.set_state_satisfying(next_idx)
 						sat_indecies.append(next_idx)
 				# Add to both matrices
-				rf.insert(cur_idx, next_idx, rate)
-				mat.add_next_value(cur_idx, next_idx, rate)
+				print(cur_idx, next_idx, rate)
+				cardio_rf.insert(cur_idx, next_idx, rate)
+				stormpy_mat.add_next_value(cur_idx, next_idx, rate)
 
-		print("Finished building model.")
+		print(f"Finished building model with state count {state_count}")
 		# Model check for cardio
 		print("Checking model with cardio")
 		lower_bound, upper_bound = cardio_rf.build_matrix_and_get_bounds(time_bound)
 		print(f"Cardio returned bound {lower_bound}, {upper_bound}")
 		print("Checking model with storm")
 		# We have to build labeling for storm
-		stormpy_labels = stormpy.StateLabeling()
+		stormpy_labels = stormpy.StateLabeling(state_count)
 		stormpy_labels.add_label_to_state("absorbing", 0)
 		for idx in sat_indecies:
 			stormpy_labels.add_label_to_state("satisfying", next_idx)

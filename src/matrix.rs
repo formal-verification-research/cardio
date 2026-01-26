@@ -176,6 +176,11 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 
 	/// Inserts or replaces a value at the position `row, col` in the matrix.
 	fn insert(&mut self, row: usize, col: usize, entry: f64) {
+		println!("Called insert on {row}, {col}, {entry}");
+		// No need to add if the entry is zero
+		if entry == 0.0 {
+			return;
+		}
 		// Call resize regardless since it will do nothing if we have enough capacity
 		self.resize(row);
 		// Since we only insert a transition if we've encountered that state, we can assume
@@ -290,17 +295,19 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 
 	fn to_unif_matrix(&self) -> (f64, sprs::CsMat<f64>) {
 		// We have to do it this way since the `Sub` trait isn't implemented for sparse matrices.
-		let one = 1.0;
 		let epoch = self.epoch();
 		let state_count = self.len();
 		let row_cnt = self.data.len();
 		let mut rows = Vec::<usize>::with_capacity(state_count + row_cnt);
 		let mut cols = Vec::<usize>::with_capacity(state_count + row_cnt);
 		let mut values = Vec::<f64>::with_capacity(state_count + row_cnt);
+		let mut dim = 0;
 		for (row, col_option) in self.data.iter().enumerate() {
+			dim = dim.max(row);
 			let row_sum = self.row_sum(row);
 			if let Some(col_data) = col_option {
 				for (col, value) in col_data.iter() {
+					dim = dim.max(*col);
 					rows.push(row);
 					cols.push(*col);
 					values.push(*value / epoch);
@@ -310,12 +317,15 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 			if let Some(row_sum) = row_sum {
 				rows.push(row);
 				cols.push(row);
-				values.push(one - row_sum / epoch);
+				values.push(1.0 - row_sum / epoch);
 			}
 		}
+		println!("Rows: {:?}\nCols: {:?}\nValues: {:?}", rows, cols, values);
+		println!("Dim: {dim}");
+		assert!(values.len() == rows.len() && rows.len() == cols.len());
 		(
 			epoch,
-			CsMat::new_csc((state_count, state_count), rows, cols, values),
+			CsMat::new_csc((dim + 1, dim + 1), rows, cols, values),
 		)
 	}
 }
