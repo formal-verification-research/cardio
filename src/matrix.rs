@@ -63,13 +63,13 @@ pub trait SprsMatBuilder {
 	/// The sum of a row.
 	fn row_sum(&self, row: usize) -> Option<f64>;
 	/// Creates the sparse matrix from the data.
-	fn to_sparse_matrix(&self) -> sprs::CsMat<f64>;
+	fn to_sparse_matrix(&mut self) -> sprs::CsMat<f64>;
 	/// Creates an infantesimile generator matrix.
-	fn to_inf_matrix(&self) -> (f64, sprs::CsMat<f64>);
+	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>);
 	/// Creates a uniformized matrix, suitable for model checking.
-	fn to_unif_matrix(&self) -> (f64, sprs::CsMat<f64>);
+	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>);
 	/// Creates an explicit model context, given a labelling structure
-	fn to_model_context(&self, labels: &Labels, discrete_time: bool) -> ExplicitModelContext {
+	fn to_model_context(&mut self, labels: &Labels, discrete_time: bool) -> ExplicitModelContext {
 		let (epoch, mat) = if discrete_time {
 			(1.0, self.to_sparse_matrix())
 		} else {
@@ -89,6 +89,8 @@ pub struct OptimalSprsMatBuilder {
 	data: Vec<Option<VecMap<usize, f64>>>,
 	/// The number of elements (not the number of reserved elements) in the builder
 	length: usize,
+	/// The highest state index
+	state_count: usize,
 	/// During state insertion, this will be set as the maximal y (destination) values from attempted
 	/// insertions (x a.k.a., source must be resized immediately).
 	queued_new_size: usize,
@@ -126,6 +128,7 @@ impl OptimalSprsMatBuilder {
 			data: Vec::with_capacity(capacity),
 			queued_new_size: capacity,
 			length: 0,
+			state_count: 0,
 			abstract_transition_count,
 		}
 	}
@@ -176,11 +179,11 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 
 	/// Inserts or replaces a value at the position `row, col` in the matrix.
 	fn insert(&mut self, row: usize, col: usize, entry: f64) {
-		println!("Called insert on {row}, {col}, {entry}");
 		// No need to add if the entry is zero
 		if entry == 0.0 {
 			return;
 		}
+		self.state_count = self.state_count.max(row + 1).max(col + 1);
 		// Call resize regardless since it will do nothing if we have enough capacity
 		self.resize(row);
 		// Since we only insert a transition if we've encountered that state, we can assume
@@ -243,7 +246,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 	}
 
 	/// I attempted to optimize this function by pre-allocating the size for each triplet vector
-	fn to_sparse_matrix(&self) -> sprs::CsMat<f64> {
+	fn to_sparse_matrix(&mut self) -> sprs::CsMat<f64> {
 		let state_count = self.len();
 		let mut rows = Vec::<usize>::with_capacity(state_count);
 		let mut cols = Vec::<usize>::with_capacity(state_count);
@@ -260,7 +263,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		CsMat::new_csc((state_count, state_count), rows, cols, values)
 	}
 
-	fn to_inf_matrix(&self) -> (f64, sprs::CsMat<f64>) {
+	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
 		let state_count = self.len();
 		let row_cnt = self.data.len();
 		let mut rows = Vec::<usize>::with_capacity(state_count + row_cnt);
@@ -293,40 +296,28 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		)
 	}
 
-	fn to_unif_matrix(&self) -> (f64, sprs::CsMat<f64>) {
+	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
+		self.apply_queued_size();
 		// We have to do it this way since the `Sub` trait isn't implemented for sparse matrices.
 		let epoch = self.epoch();
-		let state_count = self.len();
-		let row_cnt = self.data.len();
-		let mut rows = Vec::<usize>::with_capacity(state_count + row_cnt);
-		let mut cols = Vec::<usize>::with_capacity(state_count + row_cnt);
-		let mut values = Vec::<f64>::with_capacity(state_count + row_cnt);
-		let mut dim = 0;
+		let state_count = self.state_count;
+		println!("State count: {state_count}");
+		// TODO: remove this when we get direct CsMat construction to work
+		let mut m = sprs::TriMat::new((state_count, state_count));
 		for (row, col_option) in self.data.iter().enumerate() {
-			dim = dim.max(row);
 			let row_sum = self.row_sum(row);
 			if let Some(col_data) = col_option {
 				for (col, value) in col_data.iter() {
-					dim = dim.max(*col);
-					rows.push(row);
-					cols.push(*col);
-					values.push(*value / epoch);
+					println!("Adding triplet {} {} {}", row, *col, *value / epoch);
+					m.add_triplet(row, *col, *value / epoch);
 				}
 			}
 			// Add the negative diagonal entry
 			if let Some(row_sum) = row_sum {
-				rows.push(row);
-				cols.push(row);
-				values.push(1.0 - row_sum / epoch);
+				m.add_triplet(row, row, 1.0 - row_sum / epoch);
 			}
 		}
-		println!("Rows: {:?}\nCols: {:?}\nValues: {:?}", rows, cols, values);
-		println!("Dim: {dim}");
-		assert!(values.len() == rows.len() && rows.len() == cols.len());
-		(
-			epoch,
-			CsMat::new_csc((dim + 1, dim + 1), rows, cols, values),
-		)
+		(epoch, m.to_csr())
 	}
 }
 
@@ -362,15 +353,15 @@ impl SprsMatBuilder for ExplicitSprsMatBuilder {
 	}
 
 	/// See documentation for `TriMat::to_csc()`
-	fn to_sparse_matrix(&self) -> sprs::CsMat<f64> {
+	fn to_sparse_matrix(&mut self) -> sprs::CsMat<f64> {
 		self.to_csc()
 	}
 
-	fn to_unif_matrix(&self) -> (f64, sprs::CsMat<f64>) {
+	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
 		unimplemented!();
 	}
 
-	fn to_inf_matrix(&self) -> (f64, sprs::CsMat<f64>) {
+	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
 		unimplemented!();
 	}
 }

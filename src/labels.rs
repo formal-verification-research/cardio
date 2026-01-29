@@ -123,7 +123,7 @@ impl Labels {
 	/// to be true for the state at `state_index` in order for the function to return true.
 	pub fn state_has_labels(&self, state_index: usize, label_bitmask: &BitVec) -> bool {
 		let label_count = self.label_count();
-		assert!(label_bitmask.len() < label_count);
+		assert!(label_bitmask.len() <= label_count);
 		if let Some(labelling) = &self.state_labelling {
 			if state_index >= labelling.len() {
 				false

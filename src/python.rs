@@ -37,15 +37,12 @@ mod cardio {
 			self.labelling.add_label_to_state(1, state_index)
 		}
 
-		pub fn build_matrix_and_get_bounds(&self, time_bound: f64) -> (f64, f64) {
-			println!("Building model context");
+		pub fn build_matrix_and_get_bounds(&mut self, time_bound: f64) -> (f64, f64) {
 			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
-			println!("Creating relevant bitmask");
 			let relevant_bitmask = self
 				.labelling
 				.create_label_bitmask(vec!["absorbing".to_string(), "satisfying".to_string()]);
 			let state_count = model_context.state_count();
-			println!("Creating relevant states with state count: {}", state_count);
 			let relevant_states = self
 				.labelling
 				.create_relevant(&relevant_bitmask, state_count);

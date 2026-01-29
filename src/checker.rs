@@ -291,6 +291,7 @@ impl CslChecker {
 		} else if self.use_mixed_poisson {
 			// If using mixed poisson probabilities we have to scale the vector by the
 			// uniformization rate and add the values each iteration.
+			assert!(fg_result.left > 0);
 			for i in 0..fg_result.left - 1 {
 				context.distribution = &model.uniformized_matrix * &context.distribution;
 				context.distribution =

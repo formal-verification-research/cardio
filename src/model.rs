@@ -33,7 +33,7 @@ pub struct SparseModel {
 
 impl SparseModel {
 	/// Less efficient than it could be since the sparse matrix is cloned
-	pub fn new(mat_builder: &impl SprsMatBuilder, continuous_time: bool) -> Self {
+	pub fn new(mat_builder: &mut impl SprsMatBuilder, continuous_time: bool) -> Self {
 		if continuous_time {
 			let (epoch, unif_matrix) = mat_builder.to_unif_matrix();
 			Self {
@@ -52,7 +52,7 @@ impl SparseModel {
 
 	/// Creates a new sparse model with rewards structures
 	pub fn with_rewards(
-		mat_builder: &impl SprsMatBuilder,
+		mat_builder: &mut impl SprsMatBuilder,
 		continuous_time: bool,
 		rewards: rewards::ExplicitRewards,
 	) -> Self {
