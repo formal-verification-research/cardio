@@ -13,10 +13,12 @@ transitions = [
 	Transition(np.matrix([0, 0, 0, -1.0]).T, None, lambda state: 1.3)
 ]
 
-init_state = np.matrix([20,0,0,0], dtype="float64").T
+init_state = np.matrix([20, 0, 0, 0], dtype="float64").T
 
-sat_predicate = lambda state: state[3] >= 50
 
-model = Model(init_state, transitions, 100, sat_predicate)
+def sat_predicate(state): return state[3] >= 50
+
+
+model = Model(init_state, transitions, 20, sat_predicate)
 
 model.check_cardio_and_storm(100.0)

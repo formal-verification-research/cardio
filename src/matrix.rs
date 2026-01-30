@@ -1,6 +1,6 @@
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
-use num::{Rational32, Rational64, Zero, pow::Pow};
+use num::{pow::Pow, Rational32, Rational64, Zero};
 use ref_ops::RefAdd;
 use sprs::CsMat;
 use vector_map::VecMap;
@@ -308,7 +308,6 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 			let row_sum = self.row_sum(row);
 			if let Some(col_data) = col_option {
 				for (col, value) in col_data.iter() {
-					println!("Adding triplet {} {} {}", row, *col, *value / epoch);
 					m.add_triplet(row, *col, *value / epoch);
 				}
 			}

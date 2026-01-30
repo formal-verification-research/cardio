@@ -4,6 +4,7 @@ import stormpy
 import numpy as np
 from collections import deque
 
+
 class Transition:
 	def __init__(self, update: np.matrix, needed: np.matrix | None, rate_fn):
 		self.update = update
@@ -20,6 +21,7 @@ class Transition:
 		else:
 			return (cur_state + self.update, self.rate_fn(cur_state))
 
+
 class Model:
 	def __init__(self, init_state, transitions, var_bound, sat_predicate):
 		self.init_state = init_state
@@ -29,14 +31,14 @@ class Model:
 
 	def next_states(self, state):
 		updates = [transition.get_update(state) for transition in self.transitions]
-		print(updates)
+		# print(updates)
 		return [update for update in updates if update is not None and (update[0] <= self.var_bound).all()]
 
 	def check_cardio_and_storm(self, time_bound):
-		next_available_index = 2 # absorbing is 0 init is 1
+		next_available_index = 2  # absorbing is 0 init is 1
 		queue = deque([self.init_state])
 		init_tuple = tuple(self.init_state.T.tolist()[0])
-		state_to_id = {init_tuple:1}
+		state_to_id = {init_tuple: 1}
 		# Create matrices for cardio and storm
 		cardio_rf = cardio.QuantitativeReachabilityFinder()
 		stormpy_mat = stormpy.SparseMatrixBuilder()
@@ -45,13 +47,16 @@ class Model:
 
 		state_count = 1
 
+		print("Building model to check with both Cardio and Stormpy")
+
 		while len(queue) > 0:
 			cur_state = queue.popleft()
 			cur_state_tuple = tuple(cur_state.T.tolist()[0])
-			print(f"Dequeued state {cur_state_tuple}")
+			# print(f"Dequeued state {cur_state_tuple}")
 			cur_idx = state_to_id[tuple(cur_state_tuple)]
+			print(f"\rCurrently exploring state with id {cur_idx}", end="", flush=True)
 			updates = self.next_states(cur_state)
-			print("updates:", updates)
+			# print("updates:", ' '.join([f"{update[0].T}, {rate}" for update, rate in updates]))
 			for next_state, rate in updates:
 				next_tuple = tuple(next_state.T.tolist()[0])
 				next_idx = -1
@@ -66,8 +71,13 @@ class Model:
 					if self.sat_predicate(next_state):
 						cardio_rf.set_state_satisfying(next_idx)
 						sat_indecies.append(next_idx)
+					else:
+						# only explore successors if not satisfying
+						queue.append(next_state)
+					# Update next available index
+					next_available_index += 1
 				# Add to both matrices
-				print(cur_idx, next_idx, rate)
+				# print(cur_idx, next_idx, rate)
 				cardio_rf.insert(cur_idx, next_idx, rate)
 				stormpy_mat.add_next_value(cur_idx, next_idx, rate)
 
@@ -82,8 +92,10 @@ class Model:
 		stormpy_labels.add_label_to_state("absorbing", 0)
 		for idx in sat_indecies:
 			stormpy_labels.add_label_to_state("satisfying", next_idx)
-		storm_ctmc = stormpy.SparseModelCtmc(transition_matrix=stormpy_mat.build(), state_labeling=stormpy_labels, rate_transitions=True)
-		props_strs = [ f"P=? [ true U{time_bound} \"satisfying\" ]", f"P=? [ true U{time_bound} \"satisfying\" | \"absorbing\" ]" ]
+		storm_ctmc = stormpy.SparseModelCtmc(
+			transition_matrix=stormpy_mat.build(), state_labeling=stormpy_labels, rate_transitions=True)
+		props_strs = [f"P=? [ true U{time_bound} \"satisfying\" ]",
+                    f"P=? [ true U{time_bound} \"satisfying\" | \"absorbing\" ]"]
 		lprop, rprop = stormpy.parse_properties(props_strs)
 		lresult = stormpy.check_model_sparse(model, lprop, only_initial_states=True)
 		pmin = lresult.at(1)
