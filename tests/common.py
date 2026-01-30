@@ -32,7 +32,8 @@ class Model:
 	def next_states(self, state):
 		updates = [transition.get_update(state) for transition in self.transitions]
 		# print(updates)
-		return [update for update in updates if update is not None and (update[0] <= self.var_bound).all()]
+		valid_updates = [update for update in updates if update is not None]
+		return valid_updates
 
 	def check_cardio_and_storm(self, time_bound, bypass_cardio=False, bypass_storm=False):
 		next_available_index = 2  # absorbing is 0 init is 1
@@ -57,10 +58,15 @@ class Model:
 			print(f"\rCurrently exploring state with id {cur_idx}", end="", flush=True)
 			updates = self.next_states(cur_state)
 			# print("updates:", ' '.join([f"{update[0].T}, {rate}" for update, rate in updates]))
+			absorbing_rate = 0
 			for next_state, rate in updates:
 				next_tuple = tuple(next_state.T.tolist()[0])
 				next_idx = -1
-				if next_tuple in state_to_id:
+				# If the state is outside the variable bound, just connect it to the absorbing state
+				if (next_state >= self.var_bound).any():
+					absorbing_rate += rate
+					continue
+				elif next_tuple in state_to_id:
 					next_idx = state_to_id[next_tuple]
 				else:
 					# State is new
@@ -80,6 +86,9 @@ class Model:
 				# print(cur_idx, next_idx, rate)
 				cardio_rf.insert(cur_idx, next_idx, rate)
 				stormpy_mat.add_next_value(cur_idx, next_idx, rate)
+			# Insert transition to absorbing state
+			cardio_rf.insert(cur_idx, 0, absorbing_rate)
+			stormpy_mat.add_next_value(cur_idx, 0, absorbing_rate)
 
 		print(f"\rFinished building model with state count {state_count}")
 		# Model check for cardio
@@ -98,8 +107,10 @@ class Model:
 			stormpy_labels.add_label_to_state("init", 1)
 			for idx in sat_indecies:
 				stormpy_labels.add_label_to_state("satisfying", next_idx)
+			m = stormpy_mat.build()
+			print(m.nr_rows)
 			components = stormpy.SparseModelComponents(
-				stormpy_mat.build(), stormpy_labels, {}, rate_transitions=True)
+				m, stormpy_labels, {}, rate_transitions=True)
 			storm_ctmc = stormpy.SparseCtmc(components)
 			props_strs = [f"P=? [ true U[0, {time_bound}] \"satisfying\" ]",
                             f"P=? [ true U[0, {time_bound}] \"satisfying\" | \"absorbing\" ]"]
