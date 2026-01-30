@@ -81,7 +81,7 @@ class Model:
 				cardio_rf.insert(cur_idx, next_idx, rate)
 				stormpy_mat.add_next_value(cur_idx, next_idx, rate)
 
-		print(f"Finished building model with state count {state_count}")
+		print(f"\rFinished building model with state count {state_count}")
 		# Model check for cardio
 		print("Checking model with cardio")
 		lower_bound, upper_bound = cardio_rf.build_matrix_and_get_bounds(time_bound)
@@ -89,6 +89,8 @@ class Model:
 		print("Checking model with storm")
 		# We have to build labeling for storm
 		stormpy_labels = stormpy.StateLabeling(state_count)
+		stormpy_labels.add_label("absorbing")
+		stormpy_labels.add_label("satisfying")
 		stormpy_labels.add_label_to_state("absorbing", 0)
 		for idx in sat_indecies:
 			stormpy_labels.add_label_to_state("satisfying", next_idx)
