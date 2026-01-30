@@ -49,7 +49,6 @@ class Model:
 		state_count = 2  # Initial and absorbing state
 
 		print("Building model to check with both Cardio and Stormpy")
-
 		while len(queue) > 0:
 			cur_state = queue.popleft()
 			cur_state_tuple = tuple(cur_state.T.tolist()[0])
@@ -60,13 +59,14 @@ class Model:
 			# print("updates:", ' '.join([f"{update[0].T}, {rate}" for update, rate in updates]))
 			absorbing_rate = 0
 			for next_state, rate in updates:
-				next_tuple = tuple(next_state.T.tolist()[0])
-				next_idx = -1
-				# If the state is outside the variable bound, just connect it to the absorbing state
 				if (next_state >= self.var_bound).any():
 					absorbing_rate += rate
 					continue
-				elif next_tuple in state_to_id:
+
+				next_tuple = tuple(next_state.T.tolist()[0])
+				next_idx = -1
+				# If the state is outside the variable bound, just connect it to the absorbing state
+				if next_tuple in state_to_id:
 					next_idx = state_to_id[next_tuple]
 				else:
 					# State is new
@@ -83,7 +83,6 @@ class Model:
 					# Update next available index
 					next_available_index += 1
 				# Add to both matrices
-				# print(cur_idx, next_idx, rate)
 				cardio_rf.insert(cur_idx, next_idx, rate)
 				stormpy_mat.add_next_value(cur_idx, next_idx, rate)
 			# Insert transition to absorbing state
@@ -106,9 +105,10 @@ class Model:
 			stormpy_labels.add_label_to_state("absorbing", 0)
 			stormpy_labels.add_label_to_state("init", 1)
 			for idx in sat_indecies:
+				print(f"\r{idx}", end="")
 				stormpy_labels.add_label_to_state("satisfying", next_idx)
 			m = stormpy_mat.build()
-			print(m.nr_rows)
+			print(f"\n{m.nr_rows}")
 			components = stormpy.SparseModelComponents(
 				m, stormpy_labels, {}, rate_transitions=True)
 			storm_ctmc = stormpy.SparseCtmc(components)
