@@ -34,7 +34,7 @@ class Model:
 		# print(updates)
 		return [update for update in updates if update is not None and (update[0] <= self.var_bound).all()]
 
-	def check_cardio_and_storm(self, time_bound):
+	def check_cardio_and_storm(self, time_bound, bypass_cardio=False, bypass_storm=False):
 		next_available_index = 2  # absorbing is 0 init is 1
 		queue = deque([self.init_state])
 		init_tuple = tuple(self.init_state.T.tolist()[0])
@@ -45,7 +45,7 @@ class Model:
 
 		sat_indecies = []
 
-		state_count = 1
+		state_count = 2  # Initial and absorbing state
 
 		print("Building model to check with both Cardio and Stormpy")
 
@@ -83,24 +83,30 @@ class Model:
 
 		print(f"\rFinished building model with state count {state_count}")
 		# Model check for cardio
-		print("Checking model with cardio")
-		lower_bound, upper_bound = cardio_rf.build_matrix_and_get_bounds(time_bound)
-		print(f"Cardio returned bound {lower_bound}, {upper_bound}")
+		if not bypass_cardio:
+			print("Checking model with cardio")
+			lower_bound, upper_bound = cardio_rf.build_matrix_and_get_bounds(time_bound)
+			print(f"Cardio returned bound {lower_bound}, {upper_bound}")
 		print("Checking model with storm")
 		# We have to build labeling for storm
-		stormpy_labels = stormpy.StateLabeling(state_count)
-		stormpy_labels.add_label("absorbing")
-		stormpy_labels.add_label("satisfying")
-		stormpy_labels.add_label_to_state("absorbing", 0)
-		for idx in sat_indecies:
-			stormpy_labels.add_label_to_state("satisfying", next_idx)
-		storm_ctmc = stormpy.SparseModelCtmc(
-			transition_matrix=stormpy_mat.build(), state_labeling=stormpy_labels, rate_transitions=True)
-		props_strs = [f"P=? [ true U{time_bound} \"satisfying\" ]",
-                    f"P=? [ true U{time_bound} \"satisfying\" | \"absorbing\" ]"]
-		lprop, rprop = stormpy.parse_properties(props_strs)
-		lresult = stormpy.check_model_sparse(model, lprop, only_initial_states=True)
-		pmin = lresult.at(1)
-		rresult = stormpy.check_model_sparse(model, rprop, only_initial_states=True)
-		pmax = rresult.at(1)
-		print(f"Storm returned {lower_bound},{upper_bound}")
+		if not bypass_storm:
+			stormpy_labels = stormpy.StateLabeling(state_count)
+			stormpy_labels.add_label("absorbing")
+			stormpy_labels.add_label("satisfying")
+			stormpy_labels.add_label("init")
+			stormpy_labels.add_label_to_state("absorbing", 0)
+			stormpy_labels.add_label_to_state("init", 1)
+			for idx in sat_indecies:
+				stormpy_labels.add_label_to_state("satisfying", next_idx)
+			components = stormpy.SparseModelComponents(
+				stormpy_mat.build(), stormpy_labels, {}, rate_transitions=True)
+			storm_ctmc = stormpy.SparseCtmc(components)
+			props_strs = [f"P=? [ true U[0, {time_bound}] \"satisfying\" ]",
+                            f"P=? [ true U[0, {time_bound}] \"satisfying\" | \"absorbing\" ]"]
+			lprop = stormpy.parse_properties(props_strs[0])[0]
+			rprop = stormpy.parse_properties(props_strs[1])[0]
+			lresult = stormpy.check_model_sparse(storm_ctmc, lprop, only_initial_states=True)
+			pmin = lresult.at(1)
+			rresult = stormpy.check_model_sparse(storm_ctmc, rprop, only_initial_states=True)
+			pmax = rresult.at(1)
+			print(f"Storm returned {pmin},{pmax}")
