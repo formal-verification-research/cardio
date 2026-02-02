@@ -2,7 +2,7 @@
 
 use std::f64::{self, consts::PI};
 
-use num::{Bounded, traits::real::Real};
+use num::{traits::real::Real, Bounded};
 
 use crate::matrix;
 
@@ -78,11 +78,12 @@ where
 			let b = (one + lambda.recip())
 				* (lambda.recip() * ValueType::from_f64(0.125).unwrap()).exp();
 			let root_lmbda = lambda.sqrt();
-			let mut k: ValueType = ValueType::from_usize(4).unwrap();
+			let mut k: isize = 4;
 
 			loop {
+				let kvt = ValueType::from(k).unwrap();
 				// First, compute a candidate for `left`.
-				left = m as isize - (k * root_lmbda + p5).ceil().to_isize().unwrap();
+				left = m as isize - (kvt * root_lmbda + p5).ceil().to_isize().unwrap();
 
 				// If the truncation point is negative, then make it zero and terminate the loop.
 				if left.is_negative() {
@@ -92,7 +93,7 @@ where
 
 				// It's a good thing we reference the Storm code in this implementation, since they
 				// correctly point out that Fox-Glynn mixes up Phi and 1 - Phi in Propositions 2-4.
-				let max_err = b * (-k.powi(2) * p5).exp() / k;
+				let max_err = b * (-kvt.powi(2) * p5).exp() / kvt;
 
 				// If the left-hand error is relatively small, loosen the requirements on the right
 				// hand side and do not bound the left-hand side any farther.
@@ -102,7 +103,7 @@ where
 				}
 
 				// Increment k
-				k += one;
+				k += 1;
 			}
 
 			// If the loop has terminated, the left bound has been found.
@@ -111,7 +112,7 @@ where
 		// Now we just have to compute the right bound. However, first we must compute a couple
 		// of constants and update the epsilon value.
 
-		let mut k: ValueType = ValueType::from_i8(4).unwrap();
+		let mut k: isize = 4;
 		// Fox-Glynn draws a line at lambda = 400. If below, then set lambda at 400, and if
 		// not, use the higher value to compute the right bound.
 		let (lambda_max, m_max): (ValueType, isize) = if m < 400 {
@@ -129,17 +130,19 @@ where
 		// include the stop condition in the Fox-Glynn paper. Again, we have an unterminating loop
 		// with break statements.
 		loop {
+			let kvt = ValueType::from_isize(k).unwrap();
 			// The magic constants in the above if-statement come from the fact that we don't have
 			// to compute the extra multiplier factor here.
-			if er2pi * k >= (-k.powi(2) * p5).exp() {
+			if er2pi * kvt >= (-kvt.powi(2) * p5).exp() {
 				break;
 			}
 			// Increment k
-			k += one;
+			k += 1;
 		}
+		let kvt = ValueType::from_isize(k).unwrap();
 		// Compute the right bound and determine if it's reliable.
 		right = m_max
-			+ (k * (lambda_max + lambda_max).sqrt() + p5)
+			+ (kvt * (lambda_max + lambda_max).sqrt() + p5)
 				.ceil()
 				.to_isize()
 				.unwrap();

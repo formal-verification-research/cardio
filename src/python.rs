@@ -73,7 +73,14 @@ mod cardio {
 			);
 
 			let (mut lower_bound, mut upper_bound): (f64, f64) = (0.0, 0.0);
+			let mut max_state_probability: f64 = 0.0;
+			let mut total_probability: f64 = 0.0;
 			for (state_id, probability) in distribution.iter() {
+				max_state_probability = max_state_probability.max(*probability);
+				total_probability += *probability;
+				println!(
+					"\rMax state probability: {max_state_probability}. Total Probability: {total_probability}"
+				);
 				// if the state has the absorbing or satisfying label, then it can go
 				// to the upper_bound.
 				if self.labelling.state_has_labels(state_id, &relevant_bitmask) {
