@@ -132,3 +132,6 @@ class Model:
 			storm_time = time.time() - start
 			print(f"Storm returned bound [{pmin}, {pmax}]")
 			print(f"Storm took {storm_time} s")
+			abs_prop = stormpy.parse_properties(f"P=? [ true U[0, {time_bound}] \"absorbing\" ]")[0]
+			abs_res = stormpy.check_model_sparse(storm_ctmc, abs_prop, only_initial_states=True)
+			print(f"Absorbing state probability: {abs_res.at(1)}")
