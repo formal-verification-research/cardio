@@ -316,7 +316,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 				m.add_triplet(row, row, 1.0 - row_sum / epoch);
 			}
 		}
-		(epoch, m.to_csr())
+		(epoch, m.to_csc())
 	}
 }
 

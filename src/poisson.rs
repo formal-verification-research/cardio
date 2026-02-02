@@ -92,7 +92,7 @@ where
 
 				// It's a good thing we reference the Storm code in this implementation, since they
 				// correctly point out that Fox-Glynn mixes up Phi and 1 - Phi in Propositions 2-4.
-				let max_err = b * (-k.powi(2) / p5).exp() / k;
+				let max_err = b * (-k.powi(2) * p5).exp() / k;
 
 				// If the left-hand error is relatively small, loosen the requirements on the right
 				// hand side and do not bound the left-hand side any farther.
@@ -226,13 +226,14 @@ where
 
 		let tau = <ValueType as Bounded>::min_value();
 		let mut res = Self::fg_find(lambda, epsilon);
-		let mut t = res.right - res.left;
 
 		// The left side of the weights array is easy to fill in.
 		for j in (1..=m - res.left).rev() {
 			res.weights[j - 1] =
 				ValueType::from_usize(j + res.left).unwrap() / lambda * res.weights[j];
 		}
+
+		let mut t = res.right - res.left;
 
 		// Now we fill in the right side of the array. If lambda < 400, we have a separate case
 		// than if it's >= 400. The 400 number may seem like a magic number, but it is explained in
