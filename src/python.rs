@@ -49,7 +49,7 @@ mod cardio {
 			let mut check_context: CheckContext = CheckContext::initialize_with_abs(
 				&model_context,
 				time_bound,
-				1e-99,
+				1e-9,
 				relevant_states.clone(),
 				relevant_states.clone(),
 			);

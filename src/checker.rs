@@ -6,7 +6,7 @@ use crate::poisson::FoxGlynnBound;
 use crate::*;
 
 use bitvec::prelude::*;
-use num::traits::{Bounded, real::Real};
+use num::traits::{real::Real, Bounded};
 use sprs::{CsMat, CsVec, CsVecBase};
 
 use self::property::Interval;
@@ -240,6 +240,13 @@ impl CslChecker {
 		if lambda == 0.0 {
 			return context.distribution.clone();
 		}
+		if context.epsilon <= 1e-20 {
+			eprintln!("Warning: extremely low truncation error may lead to numerical instability.");
+		}
+		println!(
+			"About to compute fox glynn bound with lambda {} and epsilon {}",
+			lambda, context.epsilon
+		);
 		let mut fg_result = FoxGlynnBound::fox_glynn(lambda, context.epsilon);
 
 		if self.use_mixed_poisson {
