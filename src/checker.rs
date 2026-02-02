@@ -1,3 +1,4 @@
+use std::ops::Add;
 use std::sync::RwLock;
 
 use crate::matrix::*;
@@ -6,7 +7,7 @@ use crate::*;
 
 use bitvec::prelude::*;
 use num::traits::{Bounded, real::Real};
-use sprs::{CsMat, CsMatBase, CsVec, CsVecBase};
+use sprs::{CsMat, CsVec, CsVecBase};
 
 use self::property::Interval;
 
@@ -24,12 +25,10 @@ where
 	}
 }
 
+#[derive(Clone, Debug)]
 pub struct ExplicitModelContext<EntryType>
 where
 	EntryType: CheckableNumber,
-	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	for<'r> &'r EntryType: std::ops::Add,
-	for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// Whether the model is in discrete or continuous time
 	discrete_time: bool,
@@ -44,10 +43,21 @@ where
 impl<EntryType> ExplicitModelContext<EntryType>
 where
 	EntryType: CheckableNumber,
-	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	for<'r> &'r EntryType: std::ops::Add,
-	for<'r> &'r EntryType: std::ops::Mul,
 {
+	pub fn new(
+		discrete_time: bool,
+		labels: &labels::Labels,
+		uniformized_matrix: &CsMat<EntryType>,
+		epoch: EntryType,
+	) -> Self {
+		Self {
+			discrete_time,
+			labels: (*labels).clone(),
+			uniformized_matrix: uniformized_matrix.clone(),
+			epoch,
+		}
+	}
+
 	/// Returns the number of states in the explicit model
 	pub fn state_count(&self) -> usize {
 		self.uniformized_matrix.cols()
@@ -58,9 +68,6 @@ where
 pub struct CheckContext<EntryType>
 where
 	EntryType: CheckableNumber,
-	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	for<'r> &'r EntryType: std::ops::Add,
-	for<'r> &'r EntryType: std::ops::Mul,
 {
 	/// The (current) probability distribution over states.
 	/// TODO: should this be a Vec<EntryType> rather than a sparse vector?
@@ -85,10 +92,34 @@ where
 impl<EntryType> CheckContext<EntryType>
 where
 	EntryType: CheckableNumber,
-	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	for<'r> &'r EntryType: std::ops::Add,
-	for<'r> &'r EntryType: std::ops::Mul,
 {
+	/// Creates a check context with an initial distribution, where the initial state index is 1,
+	/// given a model context, time bound, and relevant states
+	pub fn initialize_with_abs(
+		model_context: &ExplicitModelContext<EntryType>,
+		time_bound: EntryType,
+		precision: EntryType,
+		relevant_states: BitVec,
+		checked_values: BitVec,
+	) -> Self {
+		let num_states = model_context.uniformized_matrix.cols();
+		// The distribution starts with 100% of the probability at state 1, i.e., the initial state
+		let distribution: CsVec<EntryType> =
+			CsVec::new(num_states, vec![1], vec![EntryType::one()]);
+		// epsilon and precision start at the same value, but epsilon is modified throughout model
+		// checking, whereas precision remains the same.
+		Self {
+			distribution,
+			model_context: RwLock::new((*model_context).clone()),
+			time_bound,
+			epsilon: precision,
+			checked_values,
+			add_vec: CsVec::empty(num_states),
+			relevant_states,
+			precision,
+		}
+	}
+
 	/// If there are states for which the precision is relevant.
 	pub fn has_relevant_states(&self) -> bool {
 		!self.relevant_states.is_empty()
@@ -199,16 +230,26 @@ where
 {
 	qualitative: bool,
 	use_mixed_poisson: bool,
+	// TODO: Need to figure out another way to parametrize this
 	placeholder: EntryType,
 }
 
 impl<EntryType> CslChecker<EntryType>
 where
 	EntryType: CheckableNumber + Bounded + Real,
-	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::AddAssign,
-	for<'r> &'r EntryType: std::ops::Add,
-	for<'r> &'r EntryType: std::ops::Mul,
+	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::Add<
+	// 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+	// 	Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+	// >,
 {
+	pub fn new(qualitative: bool, use_mixed_poisson: bool) -> Self {
+		Self {
+			qualitative,
+			use_mixed_poisson,
+			placeholder: EntryType::zero(),
+		}
+	}
+
 	/// Computes the transient probabilities for a given context and relevent values. The relevant
 	/// values are the nonzero probabilities and the states who have the labels we care about.
 	pub fn compute_transient(&self, context: &mut CheckContext<EntryType>) -> CsVec<EntryType> {
@@ -265,14 +306,15 @@ where
 				// CsVecI type in the sprs crate.
 				result = &model.uniformized_matrix * &result;
 				// Unfortunately, I don't believe that there is an optimizable version of AddAssign
-				result += context.add_vec.clone();
+				result = result + context.add_vec.clone();
 			}
 		} else if self.use_mixed_poisson {
 			// If using mixed poisson probabilities we have to scale the vector by the
 			// uniformization rate and add the values each iteration.
 			for i in 0..fg_result.left - 1 {
 				context.distribution = &model.uniformized_matrix * &context.distribution;
-				context.distribution += result.map(|val| *val / model.epoch);
+				context.distribution =
+					context.distribution.clone() + result.map(|val| *val / model.epoch);
 			}
 
 			// scale values by total fox-glynn weight
@@ -285,7 +327,7 @@ where
 		for idx in first_iteration..=fg_result.right {
 			let weight = fg_result.weights[idx - fg_result.left];
 			context.distribution = &model.uniformized_matrix * &context.distribution;
-			context.distribution += result.map(|x| *x * weight);
+			context.distribution = &context.distribution + &result.map(|x| *x * weight);
 		}
 
 		// Scale the vector by total weight
@@ -416,6 +458,19 @@ where
 		num_threads: usize,
 	) -> Vec<(EntryType, CsVec<EntryType>)> {
 		unimplemented!();
+	}
+}
+
+impl<EntryType> Default for CslChecker<EntryType>
+where
+	EntryType: CheckableNumber + Bounded + Real,
+	// CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>: std::ops::Add<
+	// 	CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+	// 	Output = CsVecBase<Vec<usize>, Vec<EntryType>, EntryType>,
+	// >,
+{
+	fn default() -> Self {
+		Self::new(true, true)
 	}
 }
 
