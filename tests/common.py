@@ -4,6 +4,8 @@ import stormpy
 import numpy as np
 from collections import deque
 
+import time
+
 
 class Transition:
 	def __init__(self, update: np.matrix, needed: np.matrix | None, rate_fn):
@@ -55,7 +57,15 @@ class Model:
 			# print(f"Dequeued state {cur_state_tuple}")
 			cur_idx = state_to_id[tuple(cur_state_tuple)]
 			print(f"\rCurrently exploring state with id {cur_idx}", end="", flush=True)
+			# Check if the state is satisfying
+			if self.sat_predicate(cur_state):
+				cardio_rf.set_state_satisfying(cur_idx)
+				sat_indecies.append(cur_idx)
+				cardio_rf.insert(cur_idx, cur_idx, 1.0)
+				stormpy_mat.add_next_value(cur_idx, cur_idx, 1.0)
+				continue
 			updates = self.next_states(cur_state)
+			assert (len(updates) > 0)
 			# print("updates:", ' '.join([f"{update[0].T}, {rate}" for update, rate in updates]))
 			absorbing_rate = 0
 			for next_state, rate in updates:
@@ -73,13 +83,8 @@ class Model:
 					state_to_id[next_tuple] = next_available_index
 					next_idx = next_available_index
 					state_count += 1
-					# Check if satisfying
-					if self.sat_predicate(next_state):
-						cardio_rf.set_state_satisfying(next_idx)
-						sat_indecies.append(next_idx)
-					else:
-						# only explore successors if not satisfying
-						queue.append(next_state)
+
+					queue.append(next_state)
 					# Update next available index
 					next_available_index += 1
 				# Add to both matrices
@@ -93,8 +98,11 @@ class Model:
 		# Model check for cardio
 		if not bypass_cardio:
 			print("Checking model with cardio")
+			start = time.time()
 			lower_bound, upper_bound = cardio_rf.build_matrix_and_get_bounds(time_bound)
-			print(f"Cardio returned bound {lower_bound}, {upper_bound}")
+			cardio_time = time.time() - start
+			print(f"Cardio returned bound [{lower_bound}, {upper_bound}]")
+			print(f"Cardio took {cardio_time} s")
 		print("Checking model with storm")
 		# We have to build labeling for storm
 		if not bypass_storm:
@@ -116,8 +124,11 @@ class Model:
                             f"P=? [ true U[0, {time_bound}] \"satisfying\" | \"absorbing\" ]"]
 			lprop = stormpy.parse_properties(props_strs[0])[0]
 			rprop = stormpy.parse_properties(props_strs[1])[0]
+			start = time.time()
 			lresult = stormpy.check_model_sparse(storm_ctmc, lprop, only_initial_states=True)
 			pmin = lresult.at(1)
 			rresult = stormpy.check_model_sparse(storm_ctmc, rprop, only_initial_states=True)
 			pmax = rresult.at(1)
-			print(f"Storm returned {pmin},{pmax}")
+			storm_time = time.time() - start
+			print(f"Storm returned bound [{pmin}, {pmax}]")
+			print(f"Storm took {storm_time} s")
