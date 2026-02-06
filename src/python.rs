@@ -38,6 +38,7 @@ mod cardio {
 		}
 
 		pub fn build_matrix_and_get_bounds(&mut self, time_bound: f64) -> (f64, f64) {
+			env_logger::init();
 			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
 			let relevant_bitmask = self
 				.labelling

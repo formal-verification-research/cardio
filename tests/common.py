@@ -6,6 +6,7 @@ from collections import deque
 
 import time
 
+stormpy.set_loglevel_debug()
 
 class Transition:
 	def __init__(self, update: np.matrix, needed: np.matrix | None, rate_fn):
