@@ -6,6 +6,7 @@ use crate::poisson::FoxGlynnBound;
 use crate::*;
 
 use bitvec::prelude::*;
+use log::*;
 use num::traits::{real::Real, Bounded};
 use sprs::{CsMat, CsVec, CsVecBase};
 
@@ -241,13 +242,17 @@ impl CslChecker {
 			return context.distribution.clone();
 		}
 		if context.epsilon <= 1e-20 {
-			eprintln!("Warning: extremely low truncation error may lead to numerical instability.");
+			warn!("Warning: extremely low truncation error may lead to numerical instability.");
 		}
-		println!(
+		debug!(
 			"About to compute fox glynn bound with lambda {} and epsilon {}",
 			lambda, context.epsilon
 		);
 		let mut fg_result = FoxGlynnBound::fox_glynn(lambda, context.epsilon);
+		debug!(
+			"Fox-Glynn bounds are as follows: ({}, {})",
+			fg_result.left, fg_result.right
+		);
 
 		if self.use_mixed_poisson {
 			let (mut left, mut right): (usize, usize) = (0, fg_result.weights.len() - 1);

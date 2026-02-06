@@ -2,6 +2,7 @@
 
 use std::f64::{self, consts::PI};
 
+use log::warn;
 use num::{traits::real::Real, Bounded};
 
 use crate::matrix;
@@ -54,7 +55,7 @@ where
 		let mut er2pi = epsilon * root2pi;
 
 		// Create the left and right bounds, which may be negative. Initialize them to zero
-		let (mut left, mut right): (isize, isize) = (0, 0);
+		let mut left: isize = 0;
 
 		// Like the main `fox_glynn` method, we get the mid-point from the value of lambda
 		let m = lambda.to_usize().unwrap();
@@ -69,7 +70,7 @@ where
 
 			// Warn underflow if lambda is below 25.
 			if -lambda <= tlog {
-				eprintln!("Fox-Glynn underflow."); // TODO: better error message
+				warn!("Fox-Glynn underflow."); // TODO: better error message
 			}
 		} else {
 			// We actually have to look for the left truncation point iteratively if m >= 25
@@ -141,14 +142,14 @@ where
 		}
 		let kvt = ValueType::from_isize(k).unwrap();
 		// Compute the right bound and determine if it's reliable.
-		right = m_max
+		let right = m_max
 			+ (kvt * (lambda_max + lambda_max).sqrt() + p5)
 				.ceil()
 				.to_isize()
 				.unwrap();
 		let reliability_bound = m_max + ((lambda_max + ValueType::one()) * p5).to_isize().unwrap();
 		if right > reliability_bound {
-			eprintln!(
+			warn!(
 				"Right bound unreliable! ({0} > {1})",
 				right, reliability_bound
 			);
@@ -202,7 +203,7 @@ where
 			let tau_f64 = tau.to_f64().unwrap();
 
 			if numeric_result <= tau_f64 {
-				eprintln!("Underflow in lambda >= 25!");
+				warn!("Underflow in lambda >= 25!");
 			}
 
 			// Right truncation point underflow check
@@ -212,7 +213,7 @@ where
 				let ir = i as f64;
 				let numeric_result = lnc_m - ir * (ir + 1.0) / (2.0 * lambda_f64);
 				if numeric_result <= tau_f64 {
-					eprintln!("Underflow in lambda >= 400!");
+					warn!("Underflow in lambda >= 400!");
 				}
 			}
 		}
@@ -251,10 +252,7 @@ where
 		} else {
 			// Make sure we haven't underflowed
 			if res.right <= 600 {
-				eprintln!(
-					"[Cardio: WARNING] Because {0} <= 600, underflow may occur.",
-					res.right
-				)
+				warn!("Because {0} <= 600, underflow may occur.", res.right)
 			}
 
 			// Fill the rest of the array

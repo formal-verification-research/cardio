@@ -1,6 +1,7 @@
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
-use num::{Rational32, Rational64, Zero, pow::Pow};
+use log::*;
+use num::{pow::Pow, Rational32, Rational64, Zero};
 use ref_ops::RefAdd;
 use sprs::CsMat;
 use vector_map::VecMap;
@@ -203,7 +204,10 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		// We can unwrap because we've just guaranteed that the element is non-zero
 		let row_values = &mut self.data[row].as_mut().unwrap();
 		if let Some(_old_value) = row_values.insert(col, entry) {
-			eprintln!("Warning: overwrite");
+			warn!(
+				"Overwrite inserting value into matrix at ({}, {}): {}",
+				row, col, entry
+			);
 		} else {
 			self.length += 1;
 		}
@@ -224,7 +228,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		let row_values = &mut self.data[row].as_mut().unwrap();
 		for (col, entry) in elements {
 			if let Some(_old_value) = row_values.insert(col, entry) {
-				eprintln!("Warning: overwrite");
+				warn!("Overwrite inserting row into matrix at row {}", row);
 			} else {
 				self.length += 1;
 			}
@@ -301,7 +305,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		// We have to do it this way since the `Sub` trait isn't implemented for sparse matrices.
 		let epoch = self.epoch();
 		let state_count = self.state_count;
-		println!("State count: {state_count}");
+		info!("State count: {state_count}");
 		// TODO: remove this when we get direct CsMat construction to work
 		let mut m = sprs::TriMat::new((state_count, state_count));
 		for (row, col_option) in self.data.iter().enumerate() {
