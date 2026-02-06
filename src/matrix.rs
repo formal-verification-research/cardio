@@ -1,6 +1,6 @@
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
-use num::{pow::Pow, Rational32, Rational64, Zero};
+use num::{Rational32, Rational64, Zero, pow::Pow};
 use ref_ops::RefAdd;
 use sprs::CsMat;
 use vector_map::VecMap;
@@ -65,15 +65,15 @@ pub trait SprsMatBuilder {
 	/// Creates the sparse matrix from the data.
 	fn to_sparse_matrix(&mut self) -> sprs::CsMat<f64>;
 	/// Creates an infantesimile generator matrix.
-	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>);
+	fn to_emb_dtmc(&mut self) -> (f64, sprs::CsMat<f64>);
 	/// Creates a uniformized matrix, suitable for model checking.
-	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>);
+	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>);
 	/// Creates an explicit model context, given a labelling structure
 	fn to_model_context(&mut self, labels: &Labels, discrete_time: bool) -> ExplicitModelContext {
 		let (epoch, mat) = if discrete_time {
 			(1.0, self.to_sparse_matrix())
 		} else {
-			self.to_unif_matrix()
+			self.to_inf_matrix()
 		};
 		ExplicitModelContext::new(discrete_time, labels, &mat, epoch)
 	}
@@ -263,7 +263,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		CsMat::new_csc((state_count, state_count), rows, cols, values)
 	}
 
-	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
+	fn to_emb_dtmc(&mut self) -> (f64, sprs::CsMat<f64>) {
 		let state_count = self.len();
 		let row_cnt = self.data.len();
 		let mut rows = Vec::<usize>::with_capacity(state_count + row_cnt);
@@ -296,7 +296,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		)
 	}
 
-	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
+	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
 		self.apply_queued_size();
 		// We have to do it this way since the `Sub` trait isn't implemented for sparse matrices.
 		let epoch = self.epoch();
@@ -356,11 +356,11 @@ impl SprsMatBuilder for ExplicitSprsMatBuilder {
 		self.to_csc()
 	}
 
-	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
+	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
 		unimplemented!();
 	}
 
-	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
+	fn to_emb_dtmc(&mut self) -> (f64, sprs::CsMat<f64>) {
 		unimplemented!();
 	}
 }
