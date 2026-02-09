@@ -7,7 +7,7 @@ use crate::*;
 
 use bitvec::prelude::*;
 use log::*;
-use num::traits::{real::Real, Bounded};
+use num::traits::{Bounded, real::Real};
 use sprs::{CsMat, CsVec, CsVecBase};
 
 use self::property::Interval;
@@ -275,6 +275,12 @@ impl CslChecker {
 			}
 			// TODO: check for numerical instability
 		}
+
+		debug!(
+			"Starting iterations. Matrix size: {} x {}",
+			model.uniformized_matrix.rows(),
+			model.uniformized_matrix.cols()
+		);
 
 		// Create the result vector
 		let mut first_iteration = fg_result.left;

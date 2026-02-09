@@ -96,4 +96,14 @@ mod cardio {
 			(lower_bound, upper_bound)
 		}
 	}
+
+	#[pyo3::pymodule]
+	mod util {
+		use crate::poisson::FoxGlynnBound;
+		#[pyo3::pyfunction]
+		pub fn fg_find(lambda: f64, epsilon: f64) -> (usize, usize, f64, Vec<f64>) {
+			let bound = FoxGlynnBound::<f64>::fox_glynn(lambda, epsilon);
+			(bound.left, bound.right, bound.total_weight, bound.weights)
+		}
+	}
 }

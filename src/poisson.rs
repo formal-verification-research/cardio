@@ -3,7 +3,7 @@
 use std::f64::{self, consts::PI};
 
 use log::warn;
-use num::{traits::real::Real, Bounded};
+use num::{Bounded, traits::real::Real};
 
 use crate::matrix;
 
