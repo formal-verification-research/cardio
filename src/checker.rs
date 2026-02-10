@@ -362,6 +362,7 @@ impl CslChecker {
 		let mut iteration_count = 0;
 		loop {
 			iteration_count += 1;
+			// TODO: once everything is working, have this edited in-place
 			let intermediate_result = match bound {
 				// TODO: update this.
 				Interval::TimeUnbounded => self.steady_state(context),

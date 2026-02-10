@@ -1,7 +1,8 @@
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
+use bitvec::prelude::*;
 use log::*;
-use num::{pow::Pow, Rational32, Rational64, Zero};
+use num::{Rational32, Rational64, Zero, pow::Pow};
 use ref_ops::RefAdd;
 use sprs::CsMat;
 use vector_map::VecMap;
@@ -43,6 +44,28 @@ impl CheckableNumber for f32 {}
 impl CheckableNumber for Rational64 {}
 impl CheckableNumber for Rational32 {}
 
+pub fn uniformize(
+	matrix: &mut sprs::CsMat<f64>,
+	steps: &mut Vec<(usize, f64)>,
+	rates: Vec<f64>,
+	uniformization_rate: f64,
+	deadlock: &BitVec,
+) {
+	let mut row: usize = 0;
+	for deadlock_index in deadlock.iter_ones() {
+		let old_rate = rates[row];
+		if old_rate == uniformization_rate {
+			// We don't need to uniformize this row
+			row += 1;
+			continue;
+		}
+		// Get the current row
+		// for val : matrix.
+	}
+
+	unimplemented!();
+}
+
 /// A trait that represents any type of sparse matrix construction.
 pub trait SprsMatBuilder {
 	/// Get the value (if it exists) at row `row` and column `col`. If it does not exist, this
@@ -74,9 +97,14 @@ pub trait SprsMatBuilder {
 		let (epoch, mat) = if discrete_time {
 			(1.0, self.to_sparse_matrix())
 		} else {
-			self.to_inf_matrix()
+			self.to_unif_matrix()
 		};
 		ExplicitModelContext::new(discrete_time, labels, &mat, epoch)
+	}
+
+	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
+		let (epoch, mut inf_matrix) = self.to_inf_matrix();
+		(epoch, inf_matrix)
 	}
 }
 
