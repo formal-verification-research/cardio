@@ -7,12 +7,14 @@ mod cardio {
 		matrix::{OptimalSprsMatBuilder, SprsMatBuilder},
 		property::*,
 	};
+	use log::*;
 	use pyo3::prelude::*;
 
 	#[pyclass]
 	pub struct QuantitativeReachabilityFinder {
 		matrix_builder: OptimalSprsMatBuilder,
 		labelling: Labels,
+		satisfying_state_count: usize,
 	}
 
 	#[pymethods]
@@ -22,6 +24,7 @@ mod cardio {
 			Self {
 				matrix_builder: OptimalSprsMatBuilder::new(),
 				labelling: Labels::with_abs_and_sat(),
+				satisfying_state_count: 0,
 			}
 		}
 
@@ -34,11 +37,13 @@ mod cardio {
 		}
 
 		pub fn set_state_satisfying(&mut self, state_index: usize) {
-			self.labelling.add_label_to_state(1, state_index)
+			self.satisfying_state_count += 1;
+			self.labelling.add_label_to_state(1, state_index);
 		}
 
 		pub fn build_matrix_and_get_bounds(&mut self, time_bound: f64) -> (f64, f64) {
 			env_logger::init();
+			debug!("Satisfying state count: {}", self.satisfying_state_count);
 			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
 			let relevant_bitmask = self
 				.labelling
@@ -47,6 +52,10 @@ mod cardio {
 			let relevant_states = self
 				.labelling
 				.create_relevant(&relevant_bitmask, state_count);
+			debug!(
+				"Relevant state count (from create_relevant): {}",
+				relevant_states.len()
+			);
 			let mut check_context: CheckContext = CheckContext::initialize_with_abs(
 				&model_context,
 				time_bound,
@@ -54,7 +63,7 @@ mod cardio {
 				relevant_states.clone(),
 				relevant_states.clone(),
 			);
-			println!("Creating CSL checker.");
+			info!("Creating CSL checker.");
 			let mut csl_checker: CslChecker = CslChecker::default();
 			let interval = Interval::TimeBoundedUpper(time_bound);
 			// let property = StateFormula::TransientQuery(
@@ -79,7 +88,7 @@ mod cardio {
 			for (state_id, probability) in distribution.iter() {
 				max_state_probability = max_state_probability.max(*probability);
 				total_probability += *probability;
-				println!(
+				debug!(
 					"\rMax state probability: {max_state_probability}. Total Probability: {total_probability}"
 				);
 				// if the state has the absorbing or satisfying label, then it can go

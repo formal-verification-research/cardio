@@ -184,11 +184,17 @@ impl CheckContext {
 		assert!(label_indecies.len() == model.labels.label_count());
 		let state_count = model.state_count();
 		self.relevant_states = BitVec::with_capacity(state_count);
+		// Initialize the bitvector to all zeros
+		(0..state_count).for_each(|_| self.relevant_states.push(false));
+		assert!(self.relevant_states.len() == state_count);
+		let mut relevant_state_count = 0;
 		for (idx, &val) in self.distribution.iter() {
-			if val != 0.0 && model.labels.state_has_labels(idx, &label_indecies) {
+			if val != 0.0 || model.labels.state_has_labels(idx, &label_indecies) {
 				self.relevant_states.set(idx, true);
+				relevant_state_count += 1;
 			}
 		}
+		debug!("Relevant state count: {relevant_state_count}");
 	}
 
 	/// Zeroes any state index in the distribution that does not have the labels in the label
@@ -245,7 +251,7 @@ impl CslChecker {
 			warn!("Warning: extremely low truncation error may lead to numerical instability.");
 		}
 		debug!(
-			"About to compute fox glynn bound with lambda {} and epsilon {}",
+			"About to compute Fox-Glynn bound with lambda {} and epsilon {}",
 			lambda, context.epsilon
 		);
 		let mut fg_result = FoxGlynnBound::fox_glynn(lambda, context.epsilon);
@@ -310,7 +316,7 @@ impl CslChecker {
 			// If using mixed poisson probabilities we have to scale the vector by the
 			// uniformization rate and add the values each iteration.
 			assert!(fg_result.left > 0);
-			for i in 0..fg_result.left - 1 {
+			for _i in 0..fg_result.left - 1 {
 				context.distribution = &model.uniformized_matrix * &context.distribution;
 				context.distribution =
 					context.distribution.clone() + result.map(|val| *val / model.epoch);
@@ -353,7 +359,9 @@ impl CslChecker {
 	) -> CsVec<f64> {
 		let epoch = context.epoch();
 		// Loop until we've reached the desired termination.
+		let mut iteration_count = 0;
 		loop {
+			iteration_count += 1;
 			let intermediate_result = match bound {
 				// TODO: update this.
 				Interval::TimeUnbounded => self.steady_state(context),
@@ -421,6 +429,7 @@ impl CslChecker {
 				}
 			};
 			if context.precision_reached(&intermediate_result) {
+				debug!("Precision reached after {iteration_count} iterations");
 				return intermediate_result;
 			}
 		}
