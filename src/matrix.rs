@@ -44,26 +44,77 @@ impl CheckableNumber for f32 {}
 impl CheckableNumber for Rational64 {}
 impl CheckableNumber for Rational32 {}
 
+/// Uniformizes an infantesimile generator matrix
 pub fn uniformize(
 	matrix: &mut sprs::CsMat<f64>,
 	steps: &mut Vec<(usize, f64)>,
 	rates: Vec<f64>,
-	uniformization_rate: f64,
+	unif_rate: f64,
 	deadlock: &BitVec,
 ) {
 	let mut row: usize = 0;
 	for deadlock_index in deadlock.iter_ones() {
 		let old_rate = rates[row];
-		if old_rate == uniformization_rate {
+		if old_rate == unif_rate {
 			// We don't need to uniformize this row
 			row += 1;
 			continue;
 		}
-		// Get the current row
-		// for val : matrix.
+		// We're in csc so we can just iterate over the outer dimension, and that will
+		// represent the columns.
+		for (col_idx, mut col) in matrix.outer_iterator_mut().enumerate() {
+			let val = col[row];
+			col[row] = if col_idx == deadlock_index {
+				// Compute the new self loop index
+				let sloop = unif_rate - old_rate + val * old_rate;
+				sloop / unif_rate
+			} else {
+				val * old_rate / unif_rate
+			}
+		}
+		row += 1;
 	}
+	assert!(row == matrix.rows());
+	for step in steps.iter_mut() {
+		let index = step.0;
+		step.1 *= rates[index] / unif_rate;
+	}
+}
 
-	unimplemented!();
+/// (Re)-uniformizes a uniformized matrix given that it has already been uniformized
+pub fn reuniformize(
+	matrix: &mut sprs::CsMat<f64>,
+	steps: &mut Vec<(usize, f64)>,
+	old_unif_rate: f64,
+	new_unif_rate: f64,
+	deadlock: &BitVec,
+) {
+	if old_unif_rate == new_unif_rate {
+		// No need to re-uniformize
+		return;
+	} else if old_unif_rate > new_unif_rate {
+		panic!("Cannot re-uniformize to smaller uniformization rate!");
+	}
+	let diff = new_unif_rate - old_unif_rate;
+	let ratio = old_unif_rate / new_unif_rate;
+	let mut row: usize = 0;
+	for deadlock_index in deadlock.iter_ones() {
+		for (col_idx, mut col) in matrix.outer_iterator_mut().enumerate() {
+			let val = col[row];
+			col[row] = if col_idx == deadlock_index {
+				// Compute new self loop
+				let sloop = diff + val * old_unif_rate;
+				sloop / new_unif_rate
+			} else {
+				val * ratio
+			}
+		}
+		row += 1;
+	}
+	assert!(row == matrix.rows());
+	for step in steps.iter_mut() {
+		step.1 *= ratio;
+	}
 }
 
 /// A trait that represents any type of sparse matrix construction.
