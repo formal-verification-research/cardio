@@ -50,6 +50,7 @@ class Model:
 		sat_indecies = []
 
 		state_count = 2  # Initial and absorbing state
+		exit_rates = []
 
 		print("Building model to check with both Cardio and Stormpy")
 		while len(queue) > 0:
@@ -57,6 +58,8 @@ class Model:
 			cur_state_tuple = tuple(cur_state.T.tolist()[0])
 			# print(f"Dequeued state {cur_state_tuple}")
 			cur_idx = state_to_id[tuple(cur_state_tuple)]
+			while len(exit_rates) <= cur_idx:
+				exit_rates.append(0.0)
 			print(f"\rCurrently exploring state with id {cur_idx}", end="", flush=True)
 			# Check if the state is satisfying
 			if self.sat_predicate(cur_state):
@@ -70,6 +73,8 @@ class Model:
 			# print("updates:", ' '.join([f"{update[0].T}, {rate}" for update, rate in updates]))
 			absorbing_rate = 0
 			for next_state, rate in updates:
+				# Add this to the exit rates
+				exit_rates[cur_idx] += rate
 				if (next_state >= self.var_bound).any():
 					absorbing_rate += rate
 					continue
@@ -96,6 +101,7 @@ class Model:
 			stormpy_mat.add_next_value(cur_idx, 0, absorbing_rate)
 
 		print(f"\rFinished building model with state count {state_count}")
+		print(f"Max exit rate: {max(exit_rates)}")
 		# Model check for cardio
 		if not bypass_cardio:
 			print("Checking model with cardio")
