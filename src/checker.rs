@@ -108,10 +108,18 @@ impl CheckContext {
 			time_bound,
 			epsilon: precision,
 			checked_values,
-			add_vec: CsVec::empty(num_states),
+			add_vec: CsVec::empty(num_states), // TODO: I think this is where the error
+			// lies. This should be the one-step vector
 			relevant_states,
 			precision,
 		}
+	}
+
+	fn build_one_step(&mut self, non_sat_states: &BitVec) {
+		// Create a bit vector representing the states which are both non-satisfying AND
+		// are relevant
+		let ns_rel = *non_sat_states.clone() & *self.relevant_states.as_bitslice();
+		unimplemented!();
 	}
 
 	/// If there are states for which the precision is relevant.
@@ -331,7 +339,8 @@ impl CslChecker {
 		// In between the left and right fox glynn points, compute, scale and add results
 		for idx in first_iteration..=fg_result.right {
 			let weight = fg_result.weights[idx - fg_result.left];
-			context.distribution = &model.uniformized_matrix * &context.distribution;
+			context.distribution =
+				&model.uniformized_matrix * &context.distribution + &context.add_vec;
 			context.distribution = &context.distribution + &result.map(|x| *x * weight);
 		}
 
@@ -432,6 +441,8 @@ impl CslChecker {
 			if context.precision_reached(&intermediate_result) {
 				debug!("Precision reached after {iteration_count} iterations");
 				return intermediate_result;
+			} else {
+				debug!("Precision not yet reached.");
 			}
 		}
 	}
