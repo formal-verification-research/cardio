@@ -273,6 +273,7 @@ impl CslChecker {
 					fg_result.weights[right] = sum_right / model.epoch;
 					sum_right += right_weight;
 					if right == 0 {
+						// Avoid underflow
 						break;
 					} else {
 						right -= 1;
@@ -292,7 +293,7 @@ impl CslChecker {
 		let mut first_iteration = fg_result.left;
 		let mut result = if first_iteration == 0 {
 			first_iteration += 1;
-			context.distribution.clone()
+			context.distribution.map(|elem| elem * fg_result.weights[0])
 		// The initial result must be uniformized if we are in continuous time and using mixed
 		// poisson probabilities.
 		} else if self.use_mixed_poisson && !model.discrete_time {
@@ -305,7 +306,7 @@ impl CslChecker {
 		// probabilities and our left fox-glynn result is > 1, we don't have to add anything and
 		// can just multiply in place.
 		if !self.use_mixed_poisson && fg_result.left > 1 {
-			for i in 0..fg_result.left - 1 {
+			for _i in 0..fg_result.left - 1 {
 				// We use this operation to take advantage of the MulAssign trait provided by the
 				// CsVec<f64>I type in the sprs crate.
 				result = &model.uniformized_matrix * &result;
@@ -313,13 +314,12 @@ impl CslChecker {
 				result = result + context.add_vec.clone();
 			}
 		} else if self.use_mixed_poisson {
-			// If using mixed poisson probabilities we have to scale the vector by the
-			// uniformization rate and add the values each iteration.
-			assert!(fg_result.left > 0);
-			for _i in 0..fg_result.left - 1 {
+			let epoch = context.epoch();
+			// let add_scale = |a: f64, b: f64| a + b / epoch;
+			for _idx in 1..first_iteration {
+				// Multiply and then apply the scaling
 				context.distribution = &model.uniformized_matrix * &context.distribution;
-				context.distribution =
-					context.distribution.clone() + result.map(|val| *val / model.epoch);
+				result = &context.distribution + result.map(|elem| elem / epoch);
 			}
 
 			// scale values by total fox-glynn weight
@@ -340,7 +340,7 @@ impl CslChecker {
 		result
 	}
 
-	pub fn steady_state(&self, context: &mut CheckContext) -> CsVec<f64> {
+	pub fn steady_state(&self, _context: &mut CheckContext) -> CsVec<f64> {
 		unimplemented!();
 	}
 
