@@ -35,7 +35,7 @@ impl SparseModel {
 	/// Less efficient than it could be since the sparse matrix is cloned
 	pub fn new(mat_builder: &mut impl SprsMatBuilder, continuous_time: bool) -> Self {
 		if continuous_time {
-			let (epoch, unif_matrix) = mat_builder.to_inf_matrix();
+			let (epoch, unif_matrix) = mat_builder.to_unif_matrix();
 			Self {
 				mod_type: ModelType::ContinuousTime(epoch),
 				transition_matrix: unif_matrix,
@@ -57,7 +57,7 @@ impl SparseModel {
 		rewards: rewards::ExplicitRewards,
 	) -> Self {
 		if continuous_time {
-			let (epoch, unif_matrix) = mat_builder.to_inf_matrix();
+			let (epoch, unif_matrix) = mat_builder.to_unif_matrix();
 			Self {
 				mod_type: ModelType::ContinuousTime(epoch),
 				transition_matrix: unif_matrix,

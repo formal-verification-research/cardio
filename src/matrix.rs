@@ -44,8 +44,23 @@ impl CheckableNumber for f32 {}
 impl CheckableNumber for Rational64 {}
 impl CheckableNumber for Rational32 {}
 
-/// Uniformizes an infantesimile generator matrix
 pub fn uniformize(
+	matrix: &mut sprs::CsMat<f64>,
+	maybe_states: &BitVec,
+	unif_rate: f64,
+	exit_rates: Vec<f64>,
+) {
+	debug!("Uniformizing matrix with uniformization rate {}", unif_rate);
+
+	let mut row: usize = 0;
+	for state in maybe_states.iter_ones() {
+		// We use csc so we iterate over the outer dimension that is columns
+		unimplemented!();
+	}
+}
+
+/// Uniformizes an infantesimile generator matrix for a markov automata
+pub fn uniformize_ma(
 	matrix: &mut sprs::CsMat<f64>,
 	steps: &mut Vec<(usize, f64)>,
 	rates: Vec<f64>,
@@ -82,7 +97,7 @@ pub fn uniformize(
 }
 
 /// (Re)-uniformizes a uniformized matrix given that it has already been uniformized
-pub fn reuniformize(
+pub fn reuniformize_ma(
 	matrix: &mut sprs::CsMat<f64>,
 	steps: &mut Vec<(usize, f64)>,
 	old_unif_rate: f64,
@@ -153,10 +168,7 @@ pub trait SprsMatBuilder {
 		ExplicitModelContext::new(discrete_time, labels, &mat, epoch)
 	}
 
-	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
-		let (epoch, mut inf_matrix) = self.to_inf_matrix();
-		(epoch, inf_matrix)
-	}
+	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>);
 }
 
 /// A sparse matrix builder that allows for random access and updating and is optimized for VAS and
@@ -401,6 +413,44 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		}
 		(epoch, m.to_csc())
 	}
+
+	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
+		self.apply_queued_size();
+		// Like in to_inf_matrix, we have to do it this way since `Sub` isn't implemented for
+		// sprs::CsMat
+		let epoch = self.epoch();
+		info!("Uniformizing matrix with rate {epoch}");
+		let state_count = self.state_count;
+		info!("State count: {state_count}");
+		// TODO: Also remove this when direct CsMat construction works
+		let mut m = sprs::TriMat::new((state_count, state_count));
+		for (row, col_option) in self.data.iter().enumerate() {
+			let exit_rate_opt = self.row_sum(row);
+			if let Some(col_data) = col_option {
+				let mut had_self_loop: bool = false;
+				for (col, value) in col_data.iter() {
+					if *col == row {
+						if let Some(exit_rate) = exit_rate_opt {
+							// If we've added a self-loop it looks like this.
+							m.add_triplet(row, *col, (*value - exit_rate) / epoch + 1.0);
+							had_self_loop = true;
+						} else {
+							error!("Could not get exit rate for state {row}");
+							panic!("Could not get exit rate for state {row}");
+						}
+					} else {
+						m.add_triplet(row, *col, *value / epoch);
+					}
+				}
+				if !had_self_loop {
+					// If the state never had a self-loop we have to manually add in a
+					// 1 on the diagonal.
+					m.add_triplet(row, row, 1.0);
+				}
+			}
+		}
+		(epoch, m.to_csc())
+	}
 }
 
 type ExplicitSprsMatBuilder = sprs::TriMat<f64>;
@@ -444,6 +494,10 @@ impl SprsMatBuilder for ExplicitSprsMatBuilder {
 	}
 
 	fn to_emb_dtmc(&mut self) -> (f64, sprs::CsMat<f64>) {
+		unimplemented!();
+	}
+
+	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
 		unimplemented!();
 	}
 }
