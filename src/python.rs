@@ -62,7 +62,10 @@ mod cardio {
 				1e-9,
 				relevant_states.clone(),
 				relevant_states.clone(),
+				self.matrix_builder.row_sum_vec(),
 			);
+
+			// check_context.build_one_step(non_sat_states, &row_sum_vec);
 			info!("Creating CSL checker.");
 			let mut csl_checker: CslChecker = CslChecker::default();
 			let interval = Interval::TimeBoundedUpper(time_bound);

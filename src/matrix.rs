@@ -150,8 +150,22 @@ pub trait SprsMatBuilder {
 			self.insert(row, col, entry);
 		}
 	}
+	/// The number of rows
+	fn row_count(&self) -> usize;
 	/// The sum of a row.
 	fn row_sum(&self, row: usize) -> Option<f64>;
+	/// A vector of row sums
+	fn row_sum_vec(&self) -> Vec<f64> {
+		(0..self.row_count())
+			.map(|i| {
+				if let Some(sum) = self.row_sum(i) {
+					sum
+				} else {
+					0.0
+				}
+			})
+			.collect()
+	}
 	/// Creates the sparse matrix from the data.
 	fn to_sparse_matrix(&mut self) -> sprs::CsMat<f64>;
 	/// Creates an infantesimile generator matrix.
@@ -326,6 +340,10 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		}
 	}
 
+	fn row_count(&self) -> usize {
+		self.data.len()
+	}
+
 	/// Gets the sum of a row. Useful for uniformization in CTMCs.
 	fn row_sum(&self, row: usize) -> Option<f64> {
 		if row < self.data.len() {
@@ -470,6 +488,10 @@ impl SprsMatBuilder for ExplicitSprsMatBuilder {
 			let idx = idxes[0].0;
 			Some(self.data()[idx])
 		}
+	}
+
+	fn row_count(&self) -> usize {
+		self.rows()
 	}
 
 	/// Highly unoptimized

@@ -1,4 +1,4 @@
-use std::ops::Add;
+use std::ops::{Add, BitAnd, Not};
 use std::sync::RwLock;
 
 use crate::matrix::*;
@@ -79,6 +79,8 @@ pub struct CheckContext {
 	epsilon: f64,
 	/// The states for which we perform model checking
 	checked_values: BitVec,
+	/// Exit rates for each row
+	exit_rates: Vec<f64>,
 	/// The value we add during the self multiplication
 	add_vec: CsVec<f64>,
 	/// The states for which precision is relevant
@@ -96,6 +98,7 @@ impl CheckContext {
 		precision: f64,
 		relevant_states: BitVec,
 		checked_values: BitVec,
+		exit_rates: Vec<f64>,
 	) -> Self {
 		let num_states = model_context.uniformized_matrix.cols();
 		// The distribution starts with 100% of the probability at state 1, i.e., the initial state
@@ -108,6 +111,7 @@ impl CheckContext {
 			time_bound,
 			epsilon: precision,
 			checked_values,
+			exit_rates,
 			add_vec: CsVec::empty(num_states), // TODO: I think this is where the error
 			// lies. This should be the one-step vector
 			relevant_states,
@@ -115,11 +119,16 @@ impl CheckContext {
 		}
 	}
 
-	fn build_one_step(&mut self, non_sat_states: &BitVec) {
+	pub fn build_one_step(&mut self, non_sat_states: &BitVec) {
+		let epoch = self.model_context.read().unwrap().epoch;
 		// Create a bit vector representing the states which are both non-satisfying AND
 		// are relevant
-		let ns_rel = *non_sat_states.clone() & *self.relevant_states.as_bitslice();
-		unimplemented!();
+		let ns_rel = non_sat_states.clone().bitand(&self.relevant_states);
+		for (idx, val) in self.exit_rates.iter().enumerate() {
+			if *val != 0.0 && *ns_rel.get(idx).as_deref().unwrap() {
+				self.add_vec.append(idx, val / epoch);
+			}
+		}
 	}
 
 	/// If there are states for which the precision is relevant.
@@ -203,6 +212,27 @@ impl CheckContext {
 			}
 		}
 		debug!("Relevant state count: {relevant_state_count}");
+	}
+
+	/// Creates a vector of states which satisfy phi and not psi
+	pub fn create_add_vec(&mut self, phi: &BitVec, psi: &BitVec) {
+		// let phi_not_psi = phi.clone().bitand(psi.clone().not());
+		let model = self.model_context.get_mut().unwrap();
+		assert!(phi.len() == model.labels.label_count() && psi.len() == phi.len());
+		let state_count = model.state_count();
+		self.add_vec = CsVec::empty(state_count);
+		let mut pns: BitVec = BitVec::with_capacity(state_count);
+		// Initialize the bitvector to all zeros
+		(0..state_count).for_each(|_| pns.push(false));
+		for (idx, &val) in self.distribution.iter() {
+			if val != 0.0
+				|| (model.labels.state_has_labels(idx, &phi)
+					&& !model.labels.state_has_labels(idx, &psi))
+			{
+				pns.set(idx, true);
+			}
+		}
+		self.build_one_step(&pns);
 	}
 
 	/// Zeroes any state index in the distribution that does not have the labels in the label
@@ -369,6 +399,8 @@ impl CslChecker {
 		let epoch = context.epoch();
 		// Loop until we've reached the desired termination.
 		let mut iteration_count = 0;
+		let num_states = context.exit_rates.len();
+		// TODO: figure out if there's a way to eliminate these .clone() calls
 		loop {
 			iteration_count += 1;
 			// TODO: once everything is working, have this edited in-place
@@ -377,6 +409,7 @@ impl CslChecker {
 				Interval::TimeUnbounded => self.steady_state(context),
 				Interval::TimeBoundedUpper(upper_bound) => {
 					context.time_bound = upper_bound;
+					context.create_add_vec(&phi_label_mask, &psi_label_mask);
 					// Update relevant values based on the states which satisfy phi.
 					context.update_relevant_states(&phi_label_mask);
 					self.compute_transient(context)
@@ -390,6 +423,7 @@ impl CslChecker {
 					assert!(epoch == 1.0);
 					// Update the context's bound with the number of steps.
 					context.time_bound = steps as f64;
+					context.create_add_vec(&phi_label_mask, &psi_label_mask);
 					// Update relevant values based on the states which satisfy phi.
 					context.update_relevant_states(&phi_label_mask);
 					// Finally, compute transient probabilities
@@ -406,6 +440,8 @@ impl CslChecker {
 
 					// First, we compute (2) given the initial distribution.
 					context.time_bound = upper_bound - lower_bound;
+					// TODO: one-step vector
+
 					// Update relevant values based on the states which satisfy phi.
 					context.update_relevant_states(&phi_label_mask);
 					let distribution = self.compute_transient(context);
@@ -414,6 +450,8 @@ impl CslChecker {
 					// Zero the distribution values for any state which does not satisfy psi
 					context.zero_unsatisfying_states(&psi_label_mask);
 					context.time_bound = lower_bound;
+					// context.add_vec = CsVec::empty(num_states);
+					context.create_add_vec(&phi_label_mask, &psi_label_mask);
 					// Update relevant values based on the states which satisfy phi.
 					context.update_relevant_states(&phi_label_mask);
 					self.compute_transient(context)
