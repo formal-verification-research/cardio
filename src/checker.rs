@@ -149,6 +149,16 @@ impl CheckContext {
 	/// Checks to see if we've reached the desired precision for all of the relevant states. This
 	/// function also updates the epsilon value thus it takes a `&mut self`.
 	pub fn precision_reached(&mut self, intermediate_result: &CsVec<f64>) -> bool {
+		// First, check if any elements in the intermediate result are NaN. If so, we cannot
+		// continue iteration.
+		for (idx, val) in intermediate_result.iter() {
+			if val.is_nan() {
+				panic!("Got NaN value for probability at index {idx} of intermediate result!");
+			} else if val.is_infinite() {
+				panic!("Got infinite value for probability at index {idx} of intermediate result!");
+			}
+		}
+
 		// The element for new_epsilon when the result is zero
 		let zero_epsilon = self.epsilon * 0.1;
 		// Iterate over all relevant state indecies, take the results and map them to a candidate
@@ -480,7 +490,10 @@ impl CslChecker {
 				debug!("Precision reached after {iteration_count} iterations");
 				return intermediate_result;
 			} else {
-				debug!("Precision not yet reached.");
+				debug!(
+					"Precision not yet reached. Intermediate result: {:?}",
+					intermediate_result
+				);
 			}
 		}
 	}
