@@ -7,7 +7,7 @@ use crate::*;
 
 use bitvec::prelude::*;
 use log::*;
-use num::traits::{Bounded, real::Real};
+use num::traits::{real::Real, Bounded};
 use sprs::{CsMat, CsVec, CsVecBase};
 
 use self::property::Interval;
@@ -121,11 +121,14 @@ impl CheckContext {
 
 	pub fn build_one_step(&mut self, non_sat_states: &BitVec) {
 		let epoch = self.model_context.read().unwrap().epoch;
+		assert!(epoch != 0.0);
+		debug!("The epoch for this model is {epoch}");
 		// Create a bit vector representing the states which are both non-satisfying AND
 		// are relevant
 		let ns_rel = non_sat_states.clone().bitand(&self.relevant_states);
 		for (idx, val) in self.exit_rates.iter().enumerate() {
 			if *val != 0.0 && *ns_rel.get(idx).as_deref().unwrap() {
+				// debug!("Adding val {val} / {epoch} to index {idx}");
 				self.add_vec.append(idx, val / epoch);
 			}
 		}
