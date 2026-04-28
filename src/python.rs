@@ -49,6 +49,7 @@ mod cardio {
 				.labelling
 				.create_label_bitmask(vec!["absorbing".to_string(), "satisfying".to_string()]);
 			let state_count = model_context.state_count();
+			let deadlock_idxes = self.matrix_builder.get_deadlocks();
 			let relevant_states = self
 				.labelling
 				.create_relevant(&relevant_bitmask, state_count);
@@ -62,6 +63,7 @@ mod cardio {
 				1e-9,
 				relevant_states.clone(),
 				relevant_states.clone(),
+				deadlock_idxes,
 				self.matrix_builder.row_sum_vec(),
 			);
 

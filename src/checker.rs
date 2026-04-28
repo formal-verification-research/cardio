@@ -38,6 +38,7 @@ where
 	/// The uniformized DTMC if a CTMC or the probability matrix if it is a DTMC.
 	uniformized_matrix: CsMat<f64>,
 	/// The epoch time. If a DTMC, this should be one.
+	/// This is also the reciprocal of the uniformization rate if a CTMC
 	epoch: f64,
 }
 
@@ -63,6 +64,11 @@ where
 	pub fn state_count(&self) -> usize {
 		self.uniformized_matrix.cols()
 	}
+
+	pub fn reuniformize(&mut self, new_rate: f64, deadlock: &BitVec) {
+		let old_rate = 1.0 / self.epoch;
+		reuniformize_ma(&mut self.uniformized_matrix, old_rate, new_rate, deadlock);
+	}
 }
 
 /// A struct that contains the program context for a model checker.
@@ -79,6 +85,8 @@ pub struct CheckContext {
 	epsilon: f64,
 	/// The states for which we perform model checking
 	checked_values: BitVec,
+	/// Deadlock states
+	deadlock: BitVec,
 	/// Exit rates for each row
 	exit_rates: Vec<f64>,
 	/// The value we add during the self multiplication
@@ -98,6 +106,7 @@ impl CheckContext {
 		precision: f64,
 		relevant_states: BitVec,
 		checked_values: BitVec,
+		deadlock: BitVec,
 		exit_rates: Vec<f64>,
 	) -> Self {
 		let num_states = model_context.uniformized_matrix.cols();
@@ -112,6 +121,7 @@ impl CheckContext {
 			epsilon: precision,
 			checked_values,
 			exit_rates,
+			deadlock,
 			add_vec: CsVec::empty(num_states), // TODO: I think this is where the error
 			// lies. This should be the one-step vector
 			relevant_states,
@@ -227,6 +237,24 @@ impl CheckContext {
 		debug!("Relevant state count: {relevant_state_count}");
 	}
 
+	pub fn uniformization_rate(&self) -> f64 {
+		self.relevant_states
+			.iter_ones()
+			.map(|idx| self.distribution[idx])
+			.reduce(|a, b| {
+				// Sanity checks we can maybe remove if everything works
+				debug_assert!(a.is_finite() && b.is_finite());
+				debug_assert!(!a.is_nan() && !b.is_nan());
+				// Get the highest
+				if a > b {
+					a
+				} else {
+					b
+				}
+			})
+			.unwrap() * 1.2
+	}
+
 	/// Creates a vector of states which satisfy phi and not psi
 	pub fn create_add_vec(&mut self, phi: &BitVec, psi: &BitVec) {
 		// let phi_not_psi = phi.clone().bitand(psi.clone().not());
@@ -293,6 +321,16 @@ impl CslChecker {
 	pub fn compute_transient(&self, context: &mut CheckContext) -> CsVec<f64> {
 		// TODO: more graceful handling if cannot read
 		let model = context.model_context.read().unwrap();
+		// Get the new matrix with the new uniformization rate
+		let mut matrix = model.uniformized_matrix.clone();
+		let new_unif_rate = context.uniformization_rate();
+		reuniformize_ma(
+			&mut matrix,
+			1.0 / model.epoch,
+			new_unif_rate,
+			&context.deadlock,
+		);
+
 		let lambda = model.epoch * context.time_bound;
 		// Return the initial distribution if no epochs pass.
 		if lambda == 0.0 {
@@ -305,6 +343,7 @@ impl CslChecker {
 			"About to compute Fox-Glynn bound with lambda {} and epsilon {}",
 			lambda, context.epsilon
 		);
+		// TODO: This may be able to be optimized between iterations
 		let mut fg_result = FoxGlynnBound::fox_glynn(lambda, context.epsilon);
 		debug!(
 			"Fox-Glynn bounds are as follows: ({}, {})",

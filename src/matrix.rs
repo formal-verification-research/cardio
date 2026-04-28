@@ -2,7 +2,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 use bitvec::prelude::*;
 use log::*;
-use num::{Rational32, Rational64, Zero, pow::Pow};
+use num::{pow::Pow, Rational32, Rational64, Zero};
 use ref_ops::RefAdd;
 use sprs::CsMat;
 use vector_map::VecMap;
@@ -99,7 +99,7 @@ pub fn uniformize_ma(
 /// (Re)-uniformizes a uniformized matrix given that it has already been uniformized
 pub fn reuniformize_ma(
 	matrix: &mut sprs::CsMat<f64>,
-	steps: &mut Vec<(usize, f64)>,
+	// steps: &mut Vec<(usize, f64)>,
 	old_unif_rate: f64,
 	new_unif_rate: f64,
 	deadlock: &BitVec,
@@ -127,9 +127,9 @@ pub fn reuniformize_ma(
 		row += 1;
 	}
 	assert!(row == matrix.rows());
-	for step in steps.iter_mut() {
-		step.1 *= ratio;
-	}
+	// for step in steps.iter_mut() {
+	// 	step.1 *= ratio;
+	// }
 }
 
 /// A trait that represents any type of sparse matrix construction.
@@ -183,6 +183,25 @@ pub trait SprsMatBuilder {
 	}
 
 	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>);
+
+	fn get_deadlocks(&self) -> BitVec {
+		let n = self.row_count();
+		let mut deadlocks = BitVec::with_capacity(n);
+		deadlocks.resize(n, false);
+
+		for i in 0..n {
+			if let Some(sm) = self.row_sum(i) {
+				if sm == 0.0 {
+					deadlocks.set(i, true);
+				} else {
+					deadlocks.set(i, false);
+				}
+			} else {
+				deadlocks.set(i, true);
+			}
+		}
+		deadlocks
+	}
 }
 
 /// A sparse matrix builder that allows for random access and updating and is optimized for VAS and
