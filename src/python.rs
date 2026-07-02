@@ -69,7 +69,7 @@ mod cardio {
 
 			// check_context.build_one_step(non_sat_states, &row_sum_vec);
 			info!("Creating CSL checker.");
-			let mut csl_checker: CslChecker = CslChecker::default();
+			let csl_checker: CslChecker = CslChecker::default();
 			let interval = Interval::TimeBoundedUpper(time_bound);
 			// let property = StateFormula::TransientQuery(
 			// 	ProbabilityQueryType::SimpleQuery,

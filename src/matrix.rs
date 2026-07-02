@@ -2,7 +2,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 use bitvec::prelude::*;
 use log::*;
-use num::{pow::Pow, Rational32, Rational64, Zero};
+use num::{Rational32, Rational64, Zero, pow::Pow};
 use ref_ops::RefAdd;
 use sprs::CsMat;
 use vector_map::VecMap;
@@ -115,13 +115,16 @@ pub fn reuniformize_ma(
 	let mut row: usize = 0;
 	for deadlock_index in deadlock.iter_ones() {
 		for (col_idx, mut col) in matrix.outer_iterator_mut().enumerate() {
-			let val = col[row];
-			col[row] = if col_idx == deadlock_index {
-				// Compute new self loop
-				let sloop = diff + val * old_unif_rate;
-				sloop / new_unif_rate
-			} else {
-				val * ratio
+			debug!("Row: {}", row);
+			let val = col.get(row).unwrap_or(&0.0);
+			if *val != 0.0 {
+				col[row] = if col_idx == deadlock_index {
+					// Compute new self loop
+					let sloop = diff + val * old_unif_rate;
+					sloop / new_unif_rate
+				} else {
+					val * ratio
+				}
 			}
 		}
 		row += 1;
