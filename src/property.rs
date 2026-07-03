@@ -131,17 +131,14 @@ impl Property for AtomicProposition {
 }
 
 /// An enum representing the possible time bounds that a CSL property can handle
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Interval<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Interval {
 	/// A time bound of the form [0, T]
-	TimeBoundedUpper(ValueType),
+	TimeBoundedUpper(f64),
 	/// A time bound of the form [T, T']
-	TimeBoundWindow(ValueType, ValueType),
+	TimeBoundWindow(f64, f64),
 	/// A time bound of the form [T, oo] (T to infinity)
-	TimeBoundedLower(ValueType),
+	TimeBoundedLower(f64),
 	/// A bound in the number of steps. Because PCTL only supports an upper bound on the number of
 	/// steps, the count in here is an upper bound, i.e., from [0, k] steps.
 	StepBoundUpper(usize),
@@ -149,10 +146,7 @@ where
 	TimeUnbounded,
 }
 
-impl<ValueType> ToString for Interval<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ToString for Interval {
 	fn to_string(&self) -> String {
 		match self {
 			Self::TimeUnbounded => "".to_string(),
@@ -165,27 +159,21 @@ where
 }
 
 /// The type of transient or steady state probability query.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ProbabilityQueryType<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ProbabilityQueryType {
 	/// A simple query that asks the probability
 	SimpleQuery,
 	/// A query that asks "is the probability less than p?"
-	LessThan(ValueType),
+	LessThan(f64),
 	/// A query that asks "is the probability less than or equal to p?"
-	LessThanEqual(ValueType),
+	LessThanEqual(f64),
 	/// A query that asks "is the probability greater than p?"
-	GreaterThan(ValueType),
+	GreaterThan(f64),
 	/// A query that asks "is the probability greater than or equal to p?"
-	GreaterThanEqual(ValueType),
+	GreaterThanEqual(f64),
 }
 
-impl<ValueType> ToString for ProbabilityQueryType<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ToString for ProbabilityQueryType {
 	fn to_string(&self) -> String {
 		match self {
 			Self::SimpleQuery => "=?".to_string(),
@@ -200,10 +188,7 @@ where
 /// A CSL or PCTL state formula. PCTL excludes the `SteadyStateQuery` however, and tools should
 /// panic or error if receiving a steady-state query.
 #[derive(Clone, Debug, PartialEq)]
-pub enum StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+pub enum StateFormula {
 	/// Evaluates to `true` on all states
 	True,
 	/// Evaluates to `false` on all states
@@ -213,26 +198,20 @@ where
 	/// A string label for a particular state, i.e., "Absorbing"
 	StringLabel(String),
 	/// The negation operator on another state formula
-	Not(Box<StateFormula<ValueType>>),
+	Not(Box<StateFormula>),
 	/// The conjunction of two state formulae
-	Conjunction(Box<StateFormula<ValueType>>, Box<StateFormula<ValueType>>),
+	Conjunction(Box<StateFormula>, Box<StateFormula>),
 	/// The Disjunction of two state formulae
-	Disjunction(Box<StateFormula<ValueType>>, Box<StateFormula<ValueType>>),
+	Disjunction(Box<StateFormula>, Box<StateFormula>),
 	/// A probability query on a path formula. I.e., "from this state, what is the probability that
 	/// the next path formula holds?"
-	TransientQuery(ProbabilityQueryType<ValueType>, Box<PathFormula<ValueType>>),
+	TransientQuery(ProbabilityQueryType, Box<PathFormula>),
 	/// A steady state formula. I.e., "from this state, what is the probability that in the steady
 	/// state Phi holds?"
-	SteadyStateQuery(
-		ProbabilityQueryType<ValueType>,
-		Box<StateFormula<ValueType>>,
-	),
+	SteadyStateQuery(ProbabilityQueryType, Box<StateFormula>),
 }
 
-impl<ValueType> ops::Not for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ops::Not for StateFormula {
 	type Output = Self;
 
 	fn not(self) -> Self::Output {
@@ -247,30 +226,21 @@ where
 	}
 }
 
-impl<ValueType> ops::BitAnd for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ops::BitAnd for StateFormula {
 	type Output = Self;
 	fn bitand(self, rhs: Self) -> Self::Output {
 		Self::Conjunction(Box::new(self.clone()), Box::new(rhs.clone()))
 	}
 }
 
-impl<ValueType> ops::BitOr for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ops::BitOr for StateFormula {
 	type Output = Self;
 	fn bitor(self, rhs: Self) -> Self::Output {
 		Self::Disjunction(Box::new(self.clone()), Box::new(rhs.clone()))
 	}
 }
 
-impl<ValueType> ToString for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ToString for StateFormula {
 	fn to_string(&self) -> String {
 		match self {
 			Self::True => "true".to_string(),
@@ -302,10 +272,7 @@ where
 	}
 }
 
-impl<ValueType> Property for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl Property for StateFormula {
 	fn is_pctl(&self) -> bool {
 		match self {
 			Self::True | Self::False | Self::StringLabel(_) | Self::AtomicProposition(_) => true,
@@ -324,10 +291,7 @@ where
 	}
 }
 
-impl<ValueType> StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl StateFormula {
 	/// Creates lower and upper bound properties, useful for STAMINA.
 	pub fn create_bounds(&self) -> Option<(Self, Self)> {
 		let abs = Self::absorbing();
@@ -354,10 +318,7 @@ where
 					PathFormula::Next(phi) => {
 						let phi_lower = *phi.clone() & !abs.clone();
 						let phi_upper = *phi.clone() | abs.clone();
-						(
-							PathFormula::<ValueType>::next(&phi_lower),
-							PathFormula::<ValueType>::next(&phi_upper),
-						)
+						(PathFormula::next(&phi_lower), PathFormula::next(&phi_upper))
 					}
 					PathFormula::Until(phi, interval, psi) => {
 						// For phi, the upper bound can just be the same, but the lower bound we
@@ -369,8 +330,8 @@ where
 						let psi_lower = *psi.clone() & !abs.clone();
 						let psi_upper = *psi.clone() | abs.clone();
 						(
-							PathFormula::<ValueType>::until(&phi_lower, *interval, &psi_lower),
-							PathFormula::<ValueType>::until(&phi_upper, *interval, &psi_upper),
+							PathFormula::until(&phi_lower, *interval, &psi_lower),
+							PathFormula::until(&phi_upper, *interval, &psi_upper),
 						)
 					}
 					PathFormula::Globally(phi) => {
@@ -378,8 +339,8 @@ where
 						let phi_lower = *phi.clone() & !abs.clone();
 						let phi_upper = *phi.clone() | abs.clone();
 						(
-							PathFormula::<ValueType>::globally(&phi_lower),
-							PathFormula::<ValueType>::globally(&phi_upper),
+							PathFormula::globally(&phi_lower),
+							PathFormula::globally(&phi_upper),
 						)
 					}
 				};
@@ -409,26 +370,16 @@ where
 /// A CSL or PCTL path formula. In PCTL the interval type must be restricted to upper bounded
 /// intervals with integer bounds.
 #[derive(Clone, Debug, PartialEq)]
-pub enum PathFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+pub enum PathFormula {
 	/// If the state formula holds in the next state.
-	Next(Box<StateFormula<ValueType>>),
+	Next(Box<StateFormula>),
 	/// An "until" path formula over an interval
-	Until(
-		Box<StateFormula<ValueType>>,
-		Interval<ValueType>,
-		Box<StateFormula<ValueType>>,
-	),
+	Until(Box<StateFormula>, Interval, Box<StateFormula>),
 	/// A state formula holds on an entire path. This is equivalent to Phi U False
-	Globally(Box<StateFormula<ValueType>>),
+	Globally(Box<StateFormula>),
 }
 
-impl<ValueType> Property for PathFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl Property for PathFormula {
 	fn is_pctl(&self) -> bool {
 		match self {
 			Self::Next(sf) | Self::Globally(sf) => sf.is_pctl(),
@@ -445,10 +396,7 @@ where
 	}
 }
 
-impl<ValueType> ToString for PathFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ToString for PathFormula {
 	fn to_string(&self) -> String {
 		match self {
 			Self::Next(sf) => {
@@ -469,35 +417,25 @@ where
 	}
 }
 
-impl<ValueType> PathFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl PathFormula {
 	/// Creates a state formula of type `next`
-	pub fn next(state_formula: &StateFormula<ValueType>) -> Self {
+	pub fn next(state_formula: &StateFormula) -> Self {
 		Self::Next(Box::new(state_formula.clone()))
 	}
 
 	/// Creates a state formula of type `until`
-	pub fn until(
-		phi: &StateFormula<ValueType>,
-		interval: Interval<ValueType>,
-		psi: &StateFormula<ValueType>,
-	) -> Self {
+	pub fn until(phi: &StateFormula, interval: Interval, psi: &StateFormula) -> Self {
 		Self::Until(Box::new(phi.clone()), interval, Box::new(psi.clone()))
 	}
 
-	pub fn globally(state_formula: &StateFormula<ValueType>) -> Self {
+	pub fn globally(state_formula: &StateFormula) -> Self {
 		Self::Globally(Box::new(state_formula.clone()))
 	}
 
 	/// Creates an "eventually" state formula, which is equivalently "true U psi"
-	pub fn eventually(
-		interval: Interval<ValueType>,
-		state_formula: &StateFormula<ValueType>,
-	) -> Self {
+	pub fn eventually(interval: Interval, state_formula: &StateFormula) -> Self {
 		Self::Until(
-			Box::new(StateFormula::<ValueType>::True),
+			Box::new(StateFormula::True),
 			interval,
 			Box::new(state_formula.clone()),
 		)
@@ -512,12 +450,11 @@ mod property_tests {
 
 	#[test]
 	fn construction_test() {
-		let phi: StateFormula<f64> = StateFormula::absorbing();
+		let phi: StateFormula = StateFormula::absorbing();
 		let neg_phi = !phi.clone();
-		let eventually_abs: PathFormula<f64> =
-			PathFormula::eventually(Interval::<_>::TimeUnbounded, &phi);
-		let globally_not_abs: PathFormula<f64> = PathFormula::globally(&neg_phi);
-		let p: StateFormula<f64> = StateFormula::TransientQuery(
+		let eventually_abs: PathFormula = PathFormula::eventually(Interval::TimeUnbounded, &phi);
+		let globally_not_abs: PathFormula = PathFormula::globally(&neg_phi);
+		let p: StateFormula = StateFormula::TransientQuery(
 			ProbabilityQueryType::SimpleQuery,
 			Box::new(eventually_abs.clone()),
 		);
@@ -530,13 +467,13 @@ mod property_tests {
 
 	// #[test]
 	// fn negation_test() {
-	// let phi: StateFormula<f64> = StateFormula::AtomicProposition(evalexpr::)
+	// let phi: StateFormula = StateFormula::AtomicProposition(evalexpr::)
 	//unimplemented!();
 	//}
 
 	#[test]
 	fn parse_test() {
-		let prop_result = StateFormula::<f64>::parse(&"P=? [true U \"absorbing\"]");
+		let prop_result = StateFormula::parse(&"P=? [true U \"absorbing\"]");
 		match &prop_result {
 			Ok(prop) => println!("{}", prop.to_string()),
 			Err(err) => println!("Got error: {}", err),

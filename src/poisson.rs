@@ -2,6 +2,7 @@
 
 use std::f64::{self, consts::PI};
 
+use log::warn;
 use num::{Bounded, traits::real::Real};
 
 use crate::matrix;
@@ -54,7 +55,7 @@ where
 		let mut er2pi = epsilon * root2pi;
 
 		// Create the left and right bounds, which may be negative. Initialize them to zero
-		let (mut left, mut right): (isize, isize) = (0, 0);
+		let mut left: isize = 0;
 
 		// Like the main `fox_glynn` method, we get the mid-point from the value of lambda
 		let m = lambda.to_usize().unwrap();
@@ -69,7 +70,7 @@ where
 
 			// Warn underflow if lambda is below 25.
 			if -lambda <= tlog {
-				eprintln!("Fox-Glynn underflow."); // TODO: better error message
+				warn!("Fox-Glynn underflow."); // TODO: better error message
 			}
 		} else {
 			// We actually have to look for the left truncation point iteratively if m >= 25
@@ -78,11 +79,12 @@ where
 			let b = (one + lambda.recip())
 				* (lambda.recip() * ValueType::from_f64(0.125).unwrap()).exp();
 			let root_lmbda = lambda.sqrt();
-			let mut k: ValueType = ValueType::from_usize(4).unwrap();
+			let mut k: isize = 4;
 
 			loop {
+				let kvt = ValueType::from(k).unwrap();
 				// First, compute a candidate for `left`.
-				left = m as isize - (k * root_lmbda + p5).ceil().to_isize().unwrap();
+				left = m as isize - (kvt * root_lmbda + p5).ceil().to_isize().unwrap();
 
 				// If the truncation point is negative, then make it zero and terminate the loop.
 				if left.is_negative() {
@@ -92,7 +94,7 @@ where
 
 				// It's a good thing we reference the Storm code in this implementation, since they
 				// correctly point out that Fox-Glynn mixes up Phi and 1 - Phi in Propositions 2-4.
-				let max_err = b * (-k.powi(2) / p5).exp() / k;
+				let max_err = b * (-kvt.powi(2) * p5).exp() / kvt;
 
 				// If the left-hand error is relatively small, loosen the requirements on the right
 				// hand side and do not bound the left-hand side any farther.
@@ -102,7 +104,7 @@ where
 				}
 
 				// Increment k
-				k += one;
+				k += 1;
 			}
 
 			// If the loop has terminated, the left bound has been found.
@@ -111,7 +113,7 @@ where
 		// Now we just have to compute the right bound. However, first we must compute a couple
 		// of constants and update the epsilon value.
 
-		let mut k: ValueType = ValueType::from_i8(4).unwrap();
+		let mut k: isize = 4;
 		// Fox-Glynn draws a line at lambda = 400. If below, then set lambda at 400, and if
 		// not, use the higher value to compute the right bound.
 		let (lambda_max, m_max): (ValueType, isize) = if m < 400 {
@@ -129,23 +131,25 @@ where
 		// include the stop condition in the Fox-Glynn paper. Again, we have an unterminating loop
 		// with break statements.
 		loop {
+			let kvt = ValueType::from_isize(k).unwrap();
 			// The magic constants in the above if-statement come from the fact that we don't have
 			// to compute the extra multiplier factor here.
-			if er2pi * k >= (-k.powi(2) * p5).exp() {
+			if er2pi * kvt >= (-kvt.powi(2) * p5).exp() {
 				break;
 			}
 			// Increment k
-			k += one;
+			k += 1;
 		}
+		let kvt = ValueType::from_isize(k).unwrap();
 		// Compute the right bound and determine if it's reliable.
-		right = m_max
-			+ (k * (lambda_max + lambda_max).sqrt() + p5)
+		let right = m_max
+			+ (kvt * (lambda_max + lambda_max).sqrt() + p5)
 				.ceil()
 				.to_isize()
 				.unwrap();
 		let reliability_bound = m_max + ((lambda_max + ValueType::one()) * p5).to_isize().unwrap();
 		if right > reliability_bound {
-			eprintln!(
+			warn!(
 				"Right bound unreliable! ({0} > {1})",
 				right, reliability_bound
 			);
@@ -199,7 +203,7 @@ where
 			let tau_f64 = tau.to_f64().unwrap();
 
 			if numeric_result <= tau_f64 {
-				eprintln!("Underflow in lambda >= 25!");
+				warn!("Underflow in lambda >= 25!");
 			}
 
 			// Right truncation point underflow check
@@ -209,7 +213,7 @@ where
 				let ir = i as f64;
 				let numeric_result = lnc_m - ir * (ir + 1.0) / (2.0 * lambda_f64);
 				if numeric_result <= tau_f64 {
-					eprintln!("Underflow in lambda >= 400!");
+					warn!("Underflow in lambda >= 400!");
 				}
 			}
 		}
@@ -226,13 +230,14 @@ where
 
 		let tau = <ValueType as Bounded>::min_value();
 		let mut res = Self::fg_find(lambda, epsilon);
-		let mut t = res.right - res.left;
 
 		// The left side of the weights array is easy to fill in.
 		for j in (1..=m - res.left).rev() {
 			res.weights[j - 1] =
 				ValueType::from_usize(j + res.left).unwrap() / lambda * res.weights[j];
 		}
+
+		let mut t = res.right - res.left;
 
 		// Now we fill in the right side of the array. If lambda < 400, we have a separate case
 		// than if it's >= 400. The 400 number may seem like a magic number, but it is explained in
@@ -247,10 +252,7 @@ where
 		} else {
 			// Make sure we haven't underflowed
 			if res.right <= 600 {
-				eprintln!(
-					"[Cardio: WARNING] Because {0} <= 600, underflow may occur.",
-					res.right
-				)
+				warn!("Because {0} <= 600, underflow may occur.", res.right)
 			}
 
 			// Fill the rest of the array

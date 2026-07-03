@@ -6,35 +6,33 @@ use crate::matrix::*;
 /// An abstract representation of a rewards structure for a stochastic/Markovian model. By
 /// "abstract", we mean that the rewards structures are stored as abstract functions which have not
 /// yet been resolved and therefore cannot be used in CSL or PCTL model checking.
-pub struct AbstractRewards<StateType, ValType>
+pub struct AbstractRewards<StateType>
 where
 	StateType: PartialEq,
-	ValType: CheckableNumber,
 {
 	/// The name of this rewards structure
 	name: String,
 	/// An abstract function representing the state rewards. For a CTMC, this should return the
 	/// reward *rate* for being in a state for a specific residency time $t$, whereas for a DTMC
 	/// the function should return the amount of reward accumulated in one step.
-	state_rewards: Box<dyn Fn(&StateType) -> Option<ValType>>,
+	state_rewards: Box<dyn Fn(&StateType) -> Option<f64>>,
 	/// The transition rewards funciton. It should take, as a parameter the source state, and the
 	/// destination state, and return the amount of reward acquired by taking the transition
 	/// between those two states.
-	transition_rewards: Box<dyn Fn(&StateType, &StateType) -> Option<ValType>>,
+	transition_rewards: Box<dyn Fn(&StateType, &StateType) -> Option<f64>>,
 	/// A size hint for the number of states with rewards
 	sr_size_hint: Option<usize>,
 }
 
-impl<StateType, ValType> AbstractRewards<StateType, ValType>
+impl<StateType> AbstractRewards<StateType>
 where
 	StateType: PartialEq,
-	ValType: CheckableNumber,
 {
 	/// Creates a new abstract rewards structure. Requires a name and the rewards function.
 	pub fn new(
 		name: &str,
-		state_rewards: Box<dyn Fn(&StateType) -> Option<ValType>>,
-		transition_rewards: Box<dyn Fn(&StateType, &StateType) -> Option<ValType>>,
+		state_rewards: Box<dyn Fn(&StateType) -> Option<f64>>,
+		transition_rewards: Box<dyn Fn(&StateType, &StateType) -> Option<f64>>,
 	) -> Self {
 		Self {
 			name: name.to_string(),
@@ -47,8 +45,8 @@ where
 	/// Creates a new abstract rewards structure with a hint for the number of states with rewards.
 	pub fn with_hint(
 		name: &str,
-		state_rewards: Box<dyn Fn(&StateType) -> Option<ValType>>,
-		transition_rewards: Box<dyn Fn(&StateType, &StateType) -> Option<ValType>>,
+		state_rewards: Box<dyn Fn(&StateType) -> Option<f64>>,
+		transition_rewards: Box<dyn Fn(&StateType, &StateType) -> Option<f64>>,
 		state_reward_size_hint: usize,
 	) -> Self {
 		Self {
@@ -65,7 +63,7 @@ where
 		&self,
 		states: StateIterator,
 		state_to_id: &dyn Fn(StateType) -> usize,
-	) -> ExplicitRewards<ValType>
+	) -> ExplicitRewards
 	where
 		StateIterator: ExactSizeIterator<Item = StateType> + Clone,
 	{
@@ -82,7 +80,7 @@ where
 		// on the rewards structure, the user may be able to know a better hint.
 		let size_hint = self.sr_size_hint.unwrap_or(state_count);
 		let mut state_rewards_idxes = Vec::<usize>::with_capacity(size_hint);
-		let mut state_rewards_values = Vec::<ValType>::with_capacity(size_hint);
+		let mut state_rewards_values = Vec::with_capacity(size_hint);
 
 		// The number of states with rewards
 		let mut rew_st_count: usize = 0;
@@ -111,7 +109,7 @@ where
 		}
 
 		// Now put it all together
-		ExplicitRewards::<ValType>::from_raw(
+		ExplicitRewards::from_raw(
 			// Obviously, just keep the same name
 			self.name.clone(),
 			// Explicitly construct the vector with the state rewards
@@ -130,10 +128,7 @@ where
 /// An explicit representation of a rewards structure for a stochastic/Markov model. By "explicit",
 /// we mean that the rewards are stored in sparse matrix/vector form rather than unresolved
 /// functions, as in `AbstractRewards`.
-pub struct ExplicitRewards<ValType>
-where
-	ValType: CheckableNumber,
-{
+pub struct ExplicitRewards {
 	/// The name of this explicit rewards structure
 	name: String,
 	/// The reward for remaining within a state, stored in a vector. The index in the vector
@@ -141,24 +136,21 @@ where
 	/// depends on whether this is a continuous time or discrete time model. For a continuous-time
 	/// model, it is the accumulation rate, but for a discrete model, it is the reward for being in
 	/// a state at one step.
-	pub state_rewards: sprs::CsVec<ValType>,
+	pub state_rewards: sprs::CsVec<f64>,
 	/// The reward for taking a transition between two states. The row index is the index of the
 	/// source state, and the column index is the index of the destination state. The value is the
 	/// reward for taking the transition between those two states. Since in both continuous and
 	/// discrete time models, transitions are instantaneous, there is no difference between
 	/// transition rewards for these different types of models.
-	pub transition_rewards: sprs::CsMat<ValType>,
+	pub transition_rewards: sprs::CsMat<f64>,
 }
 
-impl<ValType> ExplicitRewards<ValType>
-where
-	ValType: CheckableNumber,
-{
+impl ExplicitRewards {
 	/// Create explicit rewards from pre-built state reward vectors and transition rewards matrix.
 	pub fn from_raw(
 		name: String,
-		state_rewards: sprs::CsVec<ValType>,
-		transition_rewards: sprs::CsMat<ValType>,
+		state_rewards: sprs::CsVec<f64>,
+		transition_rewards: sprs::CsMat<f64>,
 	) -> Self {
 		Self {
 			name,

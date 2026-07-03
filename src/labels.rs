@@ -86,9 +86,11 @@ impl Labels {
 		assert!(label_index < label_count);
 		if let Some(labelling) = &mut self.state_labelling {
 			// Resize the state labelling to the state index we've seen.
+			let mut empty_labelling = BitVec::with_capacity(label_count);
+			empty_labelling.resize(label_count, false);
 			labelling.resize(
 				labelling.len().max(state_index + 1),
-				BitVec::with_capacity(label_count),
+				empty_labelling.clone(),
 			);
 			// Update the count of labels
 			if labelling[state_index].len() >= label_index || labelling[state_index][label_index] {
@@ -123,7 +125,7 @@ impl Labels {
 	/// to be true for the state at `state_index` in order for the function to return true.
 	pub fn state_has_labels(&self, state_index: usize, label_bitmask: &BitVec) -> bool {
 		let label_count = self.label_count();
-		assert!(label_bitmask.len() < label_count);
+		assert!(label_bitmask.len() <= label_count);
 		if let Some(labelling) = &self.state_labelling {
 			if state_index >= labelling.len() {
 				false

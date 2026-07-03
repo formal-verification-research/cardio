@@ -101,11 +101,8 @@ pub fn lex(input: &str) -> Vec<Token> {
 	tokens
 }
 
-pub fn parse_interval<'a, ValueType, I>(
-	iter: &mut std::iter::Peekable<I>,
-) -> Result<Interval<ValueType>, String>
+pub fn parse_interval<'a, I>(iter: &mut std::iter::Peekable<I>) -> Result<Interval, String>
 where
-	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
 {
 	let first_token = iter.peek();
@@ -122,16 +119,16 @@ where
 			let upper_bound = iter.next().ok_or("Missing upper bound")?;
 
 			let low = if let Token::Float(l) = lower_bound {
-				Ok(ValueType::from_f64(*l).unwrap())
+				Ok(*l)
 			} else if let Token::Integer(l) = lower_bound {
-				Ok(ValueType::from_i64(*l).unwrap())
+				Ok(*l as f64)
 			} else {
 				Err("Lower bound must be numeric!")
 			}?;
 			let up = if let Token::Float(l) = upper_bound {
-				Ok(ValueType::from_f64(*l).unwrap())
+				Ok(*l)
 			} else if let Token::Integer(l) = upper_bound {
-				Ok(ValueType::from_i64(*l).unwrap())
+				Ok(*l as f64)
 			} else {
 				Err("Upper bound must be numeric!".to_string())
 			}?;
@@ -146,8 +143,8 @@ where
 		Some(Token::GreaterThan) | Some(Token::GreaterThanOrEqual) => {
 			let lower_bound = iter.next().ok_or("Missing lower bound")?;
 			let low = match lower_bound {
-				Token::Float(l) => Ok(ValueType::from_f64(*l).unwrap()),
-				Token::Integer(i) => Ok(ValueType::from_i64(*i).unwrap()),
+				Token::Float(l) => Ok(*l),
+				Token::Integer(i) => Ok(*i as f64),
 				_ => Err("Bound must be numeric!".to_string()),
 			}?;
 			Ok(Interval::TimeBoundedLower(low))
@@ -156,8 +153,8 @@ where
 		Some(Token::LessThan) => {
 			let upper_bound = iter.next().ok_or("Missing upper bound")?;
 			let up = match upper_bound {
-				Token::Float(u) => Ok(ValueType::from_f64(*u).unwrap()),
-				Token::Integer(i) => Ok(ValueType::from_i64(*i).unwrap()),
+				Token::Float(u) => Ok(*u),
+				Token::Integer(i) => Ok(*i as f64),
 				_ => Err("Bound must be numeric!".to_string()),
 			}?;
 			Ok(Interval::TimeBoundedUpper(up))
@@ -168,8 +165,8 @@ where
 		Some(Token::LessThanOrEqual) => {
 			let upper_bound = iter.next().ok_or("Missing upper bound")?;
 			let up = match upper_bound {
-				Token::Float(u) => Ok(ValueType::from_f64(*u).unwrap()),
-				Token::Integer(i) => Ok(ValueType::from_i64(*i + 1).unwrap()),
+				Token::Float(u) => Ok(*u),
+				Token::Integer(i) => Ok((*i + 1) as f64),
 				_ => Err("Bound must be numeric!".to_string()),
 			}?;
 			Ok(Interval::TimeBoundedUpper(up))
@@ -180,11 +177,8 @@ where
 }
 
 /// Parses binary operators
-pub fn parse_expression<'a, ValueType, I>(
-	iter: &mut std::iter::Peekable<I>,
-) -> Result<StateFormula<ValueType>, String>
+pub fn parse_expression<'a, I>(iter: &mut std::iter::Peekable<I>) -> Result<StateFormula, String>
 where
-	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
 {
 	let mut left = parse_state_formula(iter)?;
@@ -209,11 +203,8 @@ where
 	Ok(left)
 }
 
-pub fn parse_state_formula<'a, ValueType, I>(
-	iter: &mut std::iter::Peekable<I>,
-) -> Result<StateFormula<ValueType>, String>
+pub fn parse_state_formula<'a, I>(iter: &mut std::iter::Peekable<I>) -> Result<StateFormula, String>
 where
-	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
 {
 	match iter.next() {
@@ -246,7 +237,7 @@ where
 				Some(Token::ValueQuery) => {
 					let path_formula = parse_path_formula(iter)?;
 					Ok(StateFormula::TransientQuery(
-						ProbabilityQueryType::<ValueType>::SimpleQuery,
+						ProbabilityQueryType::SimpleQuery,
 						Box::new(path_formula),
 					))
 				}
@@ -267,36 +258,28 @@ where
 							Some(Token::LessThan) => {
 								let path_formula = parse_path_formula(iter)?;
 								Ok(StateFormula::TransientQuery(
-									ProbabilityQueryType::<ValueType>::LessThan(
-										ValueType::from_f64(*bound).unwrap(),
-									),
+									ProbabilityQueryType::LessThan(*bound),
 									Box::new(path_formula),
 								))
 							}
 							Some(Token::GreaterThan) => {
 								let path_formula = parse_path_formula(iter)?;
 								Ok(StateFormula::TransientQuery(
-									ProbabilityQueryType::<ValueType>::GreaterThan(
-										ValueType::from_f64(*bound).unwrap(),
-									),
+									ProbabilityQueryType::GreaterThan(*bound),
 									Box::new(path_formula),
 								))
 							}
 							Some(Token::LessThanOrEqual) => {
 								let path_formula = parse_path_formula(iter)?;
 								Ok(StateFormula::TransientQuery(
-									ProbabilityQueryType::<ValueType>::LessThanEqual(
-										ValueType::from_f64(*bound).unwrap(),
-									),
+									ProbabilityQueryType::LessThanEqual(*bound),
 									Box::new(path_formula),
 								))
 							}
 							Some(Token::GreaterThanOrEqual) => {
 								let path_formula = parse_path_formula(iter)?;
 								Ok(StateFormula::TransientQuery(
-									ProbabilityQueryType::<ValueType>::GreaterThanEqual(
-										ValueType::from_f64(*bound).unwrap(),
-									),
+									ProbabilityQueryType::GreaterThanEqual(*bound),
 									Box::new(path_formula),
 								))
 							}
@@ -326,7 +309,7 @@ where
 				Some(Token::ValueQuery) => {
 					let state_formula = parse_state_formula(iter)?;
 					Ok(StateFormula::SteadyStateQuery(
-						ProbabilityQueryType::<ValueType>::SimpleQuery,
+						ProbabilityQueryType::SimpleQuery,
 						Box::new(state_formula),
 					))
 				}
@@ -347,36 +330,28 @@ where
 							Some(Token::LessThan) => {
 								let state_formula = parse_state_formula(iter)?;
 								Ok(StateFormula::SteadyStateQuery(
-									ProbabilityQueryType::<ValueType>::LessThan(
-										ValueType::from_f64(*bound).unwrap(),
-									),
+									ProbabilityQueryType::LessThan(*bound),
 									Box::new(state_formula),
 								))
 							}
 							Some(Token::GreaterThan) => {
 								let state_formula = parse_state_formula(iter)?;
 								Ok(StateFormula::SteadyStateQuery(
-									ProbabilityQueryType::<ValueType>::GreaterThan(
-										ValueType::from_f64(*bound).unwrap(),
-									),
+									ProbabilityQueryType::GreaterThan(*bound),
 									Box::new(state_formula),
 								))
 							}
 							Some(Token::LessThanOrEqual) => {
 								let state_formula = parse_state_formula(iter)?;
 								Ok(StateFormula::SteadyStateQuery(
-									ProbabilityQueryType::<ValueType>::LessThanEqual(
-										ValueType::from_f64(*bound).unwrap(),
-									),
+									ProbabilityQueryType::LessThanEqual(*bound),
 									Box::new(state_formula),
 								))
 							}
 							Some(Token::GreaterThanOrEqual) => {
 								let state_formula = parse_state_formula(iter)?;
 								Ok(StateFormula::SteadyStateQuery(
-									ProbabilityQueryType::<ValueType>::GreaterThanEqual(
-										ValueType::from_f64(*bound).unwrap(),
-									),
+									ProbabilityQueryType::GreaterThanEqual(*bound),
 									Box::new(state_formula),
 								))
 							}
@@ -403,11 +378,8 @@ where
 	}
 }
 
-pub fn parse_path_formula<'a, ValueType, I>(
-	iter: &mut std::iter::Peekable<I>,
-) -> Result<PathFormula<ValueType>, String>
+pub fn parse_path_formula<'a, I>(iter: &mut std::iter::Peekable<I>) -> Result<PathFormula, String>
 where
-	ValueType: CheckableNumber,
 	I: Iterator<Item = &'a Token>,
 {
 	match iter.peek() {
