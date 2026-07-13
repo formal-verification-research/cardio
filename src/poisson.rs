@@ -46,10 +46,7 @@ where
 		let one = ValueType::one();
 		let p5 = ValueType::from_f64(0.5).unwrap();
 		// Start by setting up constants and variables
-		let (mut tau, omega) = (
-			<ValueType as Bounded>::min_value(),
-			<ValueType as Bounded>::max_value(),
-		);
+		let mut tau = <ValueType as Bounded>::min_value();
 		let root2pi = ValueType::from_f64((2.0 * PI).sqrt()).unwrap();
 		// Error bound only uses epsilon * root2pi
 		let mut er2pi = epsilon * root2pi;
@@ -60,18 +57,10 @@ where
 		// Like the main `fox_glynn` method, we get the mid-point from the value of lambda
 		let m = lambda.to_usize().unwrap();
 
-		// Because we only use tau in underflow checks, we can log it first.
-		let tlog = tau.log2();
-
 		// First, compute the left truncation point
 		if m < 25 {
 			// The left truncation point is zero for lambda midpoint is < 25
 			left = 0;
-
-			// Warn underflow if lambda is below 25.
-			if -lambda <= tlog {
-				warn!("Fox-Glynn underflow."); // TODO: better error message
-			}
 		} else {
 			// We actually have to look for the left truncation point iteratively if m >= 25
 
@@ -167,9 +156,7 @@ where
 		// size. We'll set the uninitialized values to zero...
 		res.weights.resize(weights_count, ValueType::zero());
 		// ...but we do have one slot we know the value for.
-		res.weights[m - res.left] = omega
-			/ (ValueType::from_usize(res.right - res.left).unwrap()
-				* ValueType::from_f64(1.0e10).unwrap());
+		res.weights[m - res.left] = ValueType::one();
 
 		// We have one more underflow check we have to perform. This underflow check will be
 		// performed in f64 rather than valuetype since this is a numeric method.
@@ -225,6 +212,7 @@ where
 	/// the paper at [this DOI](https://doi.org/10.1145/42404.42409).
 	pub fn fox_glynn(lambda: ValueType, epsilon: ValueType) -> Self {
 		assert!(lambda.is_positive());
+		assert!(epsilon.is_positive(), "epsilon must be positive");
 		// Start the mid point at the the current value of `lambda`.
 		let m = lambda.to_usize().unwrap();
 
