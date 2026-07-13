@@ -14,6 +14,14 @@ Cardio is written in Rust and provides Python bindings via `pyo3`. The Python bi
     - `toy.py` constructs a model and attempts to test it in cardio and compares it with stormpy. To just get the result from storm (known to be correct) run with `--bypass_cardio`. To get just Cardio's results, run with `--bypass_storm`.
 4. Rust unit tests can be run with `cargo test`.
 
+## Current debugging status
+
+- `tests/toy.py` is currently expected to fail when running Cardio's path (without `--bypass_cardio`).
+- For LLM-assisted debugging, a useful flow is:
+	1. Run `python tests/toy.py --bypass_cardio` to confirm the Storm-only baseline.
+	2. Run `python tests/toy.py --bypass_storm` to isolate Cardio behavior.
+	3. Compare model construction and labels in `tests/common.py` against Cardio's checker path in `src/python.rs` and `src/checker.rs`.
+
 ## Useful implementation context
 
 - The Python bindings currently expose:
