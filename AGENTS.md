@@ -12,6 +12,17 @@ Cardio is written in Rust and provides Python bindings via `pyo3`. The Python bi
 2. From within the project root, run `maturin develop` to compile cardio and install it in the venv.
 3. Test files are located in `./tests`. Currently, the most interesting tests are `poisson.py` and `toy.py`. These are what we are trying to get to work.
     - `toy.py` constructs a model and attempts to test it in cardio and compares it with stormpy. To just get the result from storm (known to be correct) run with `--bypass_cardio`. To get just Cardio's results, run with `--bypass_storm`.
+4. Rust unit tests can be run with `cargo test`.
+
+## Useful implementation context
+
+- The Python bindings currently expose:
+	- `cardio.QuantitativeReachabilityFinder` (for bounded-until style quantitative reachability checks).
+	- `cardio.util.fg_find` (Fox-Glynn Poisson truncation helper).
+- In the current explicit-state workflow, state index `0` is treated as absorbing and state index `1` is treated as the initial state.
+- The checker works over a uniformized matrix (`src/checker.rs`) and uses Fox-Glynn weights (`src/poisson.rs`) for transient bounded-time computations.
+- `tests/common.py` builds the same model for both Cardio and StormPy, which is useful when comparing mismatches.
+- `src/model.rs` exists in addition to the files listed below and contains model-type definitions and sparse model data structures.
 
 ## General Repo Guidance
 
