@@ -11,12 +11,13 @@ Cardio is written in Rust and provides Python bindings via `pyo3`. The Python bi
 1. Tests will be done in Python. Ensure that a Python virtual environment is set up at the repository root. Then activate that virtual environment. Tests use `numpy`, `scipy`, `pytest` and `stormpy` (a different probabilistic model checking engine), so ensure that these are installed within the venv.
 2. From within the project root, run `maturin develop` to compile cardio and install it in the venv.
 3. Test files are located in `./tests`. Currently, the most interesting tests are `poisson.py` and `toy.py`. These are what we are trying to get to work.
-    - `toy.py` constructs a model and attempts to test it in cardio and compares it with stormpy. To just get the result from storm (known to be correct) run with `--bypass_cardio`. To get just Cardio's results, run with `--bypass_storm`.
+	- `toy.py` constructs a model and attempts to test it in cardio and compares it with stormpy. To just get the result from storm (known to be correct) run with `--bypass_cardio`. To get just Cardio's results, run with `--bypass_storm`.
 4. Rust unit tests can be run with `cargo test`.
 
 ## Current debugging status
 
-- `tests/toy.py` is currently expected to fail when running Cardio's path (without `--bypass_cardio`).
+- `tests/toy.py` is currently expected to fail when running Cardio's path (without `--bypass_cardio`). Our goal is to get this to not fail.
+	- Most likely, the issue is with uniformization or Fox-Glynn.
 - For LLM-assisted debugging, a useful flow is:
 	1. Run `python tests/toy.py --bypass_cardio` to confirm the Storm-only baseline.
 	2. Run `python tests/toy.py --bypass_storm` to isolate Cardio behavior.
@@ -35,7 +36,7 @@ Cardio is written in Rust and provides Python bindings via `pyo3`. The Python bi
 ## General Repo Guidance
 
 - Formatting:
-    - With the exception of markdown, we prefer tabs over spaces. For rust code, we provide formatting rules in `rustfmt.toml`. Python formatting is less strict.
+	- With the exception of markdown, we prefer tabs over spaces. For rust code, we provide formatting rules in `rustfmt.toml`. Python formatting is less strict.
 
 ## Where things are in code
 
