@@ -7,7 +7,7 @@ use crate::*;
 
 use bitvec::prelude::*;
 use log::*;
-use num::traits::{real::Real, Bounded};
+use num::traits::{Bounded, real::Real};
 use sprs::{CsMat, CsVec, CsVecBase};
 
 use self::property::Interval;
@@ -246,11 +246,7 @@ impl CheckContext {
 				debug_assert!(a.is_finite() && b.is_finite());
 				debug_assert!(!a.is_nan() && !b.is_nan());
 				// Get the highest
-				if a > b {
-					a
-				} else {
-					b
-				}
+				if a > b { a } else { b }
 			})
 			.unwrap() * 1.2
 	}
