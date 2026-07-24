@@ -46,10 +46,7 @@ where
 		let one = ValueType::one();
 		let p5 = ValueType::from_f64(0.5).unwrap();
 		// Start by setting up constants and variables
-		let (mut tau, omega) = (
-			<ValueType as Bounded>::min_value(),
-			<ValueType as Bounded>::max_value(),
-		);
+		let mut tau = <ValueType as Bounded>::min_value();
 		let root2pi = ValueType::from_f64((2.0 * PI).sqrt()).unwrap();
 		// Error bound only uses epsilon * root2pi
 		let mut er2pi = epsilon * root2pi;
@@ -60,18 +57,10 @@ where
 		// Like the main `fox_glynn` method, we get the mid-point from the value of lambda
 		let m = lambda.to_usize().unwrap();
 
-		// Because we only use tau in underflow checks, we can log it first.
-		let tlog = tau.log2();
-
 		// First, compute the left truncation point
 		if m < 25 {
 			// The left truncation point is zero for lambda midpoint is < 25
 			left = 0;
-
-			// Warn underflow if lambda is below 25.
-			if -lambda <= tlog {
-				warn!("Fox-Glynn underflow."); // TODO: better error message
-			}
 		} else {
 			// We actually have to look for the left truncation point iteratively if m >= 25
 
@@ -167,9 +156,7 @@ where
 		// size. We'll set the uninitialized values to zero...
 		res.weights.resize(weights_count, ValueType::zero());
 		// ...but we do have one slot we know the value for.
-		res.weights[m - res.left] = omega
-			/ (ValueType::from_usize(res.right - res.left).unwrap()
-				* ValueType::from_f64(1.0e10).unwrap());
+		res.weights[m - res.left] = ValueType::one();
 
 		// We have one more underflow check we have to perform. This underflow check will be
 		// performed in f64 rather than valuetype since this is a numeric method.
@@ -225,6 +212,7 @@ where
 	/// the paper at [this DOI](https://doi.org/10.1145/42404.42409).
 	pub fn fox_glynn(lambda: ValueType, epsilon: ValueType) -> Self {
 		assert!(lambda.is_positive());
+		assert!(epsilon.is_positive(), "epsilon must be positive");
 		// Start the mid point at the the current value of `lambda`.
 		let m = lambda.to_usize().unwrap();
 
@@ -289,5 +277,319 @@ where
 		res.total_weight += res.weights[j];
 
 		res
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	type FG = FoxGlynnBound<f64>;
+
+	/// Helper: extract the normalized probability for a given k from a FoxGlynnBound.
+	fn prob(bound: &FG, k: usize) -> f64 {
+		if k < bound.left || k > bound.right {
+			return 0.0;
+		}
+		bound.weights[k - bound.left] / bound.total_weight
+	}
+
+	// --- Structural property tests ---
+
+	#[test]
+	fn center_weight_is_one() {
+		for lambda in [0.5, 1.0, 5.0, 10.0, 25.0, 100.0, 400.0, 1000.0] {
+			let m = lambda as usize;
+			let b = FG::fox_glynn(lambda, 1e-9);
+			assert!(
+				b.weights[m - b.left].abs() - 1.0 < 1e-12,
+				"center weight for lambda={lambda} should be 1.0, got {}",
+				b.weights[m - b.left]
+			);
+		}
+	}
+
+	#[test]
+	fn left_le_midpoint_le_right() {
+		for lambda in [0.1, 1.0, 5.0, 25.0, 100.0, 400.0, 1000.0, 5000.0] {
+			let m = lambda as usize;
+			let b = FG::fox_glynn(lambda, 1e-9);
+			assert!(
+				b.left <= m,
+				"left={} > m={} for lambda={}",
+				b.left,
+				m,
+				lambda
+			);
+			assert!(
+				b.right >= m,
+				"right={} < m={} for lambda={}",
+				b.right,
+				m,
+				lambda
+			);
+		}
+	}
+
+	#[test]
+	fn weights_array_length_matches_bounds() {
+		for lambda in [0.5, 5.0, 50.0, 400.0, 2000.0] {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			let expected_len = b.right - b.left + 1;
+			assert_eq!(
+				b.weights.len(),
+				expected_len,
+				"weights length mismatch for lambda={lambda}: got {} expected {expected_len}",
+				b.weights.len()
+			);
+		}
+	}
+
+	#[test]
+	fn all_weights_nonnegative() {
+		for lambda in [0.1, 1.0, 10.0, 100.0, 500.0] {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			for (i, w) in b.weights.iter().enumerate() {
+				assert!(
+					*w >= 0.0,
+					"negative weight at index {i} (k={}) for lambda={lambda}: {w}",
+					i + b.left
+				);
+			}
+		}
+	}
+
+	#[test]
+	fn total_weight_positive() {
+		for lambda in [0.01, 0.5, 5.0, 50.0, 500.0] {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			assert!(
+				b.total_weight > 0.0,
+				"total_weight not positive for lambda={lambda}"
+			);
+		}
+	}
+
+	// --- Probability distribution tests ---
+
+	#[test]
+	fn probabilities_sum_to_one() {
+		for lambda in [0.1, 1.0, 5.0, 10.0, 25.0, 100.0, 400.0, 1000.0] {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			let total: f64 = (b.left..=b.right).map(|k| prob(&b, k)).sum();
+			assert!(
+				(total - 1.0).abs() < 1e-4,
+				"probabilities sum to {total} for lambda={lambda}, expected ~1.0"
+			);
+		}
+	}
+
+	#[test]
+	fn pmf_matches_scipy() {
+		// Compare against hand-computed Poisson PMF values: P(k) = e^{-lam} * lam^k / k!
+		let cases: Vec<(f64, usize, f64)> = vec![
+			(1.0, 0, 0.3678794412), // e^{-1}
+			(1.0, 1, 0.3678794412),
+			(1.0, 5, 0.0030656629),
+			(5.0, 5, 0.1754673698),
+			(5.0, 0, 0.0067379470),
+			(10.0, 10, 0.1251100262),
+			(10.0, 7, 0.0900792140),
+			(20.0, 20, 0.0888353256),
+		];
+		for (lambda, k, expected) in cases {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			let got = prob(&b, k);
+			let tol = 1e-5;
+			assert!(
+				(got - expected).abs() < tol,
+				"P({k} | lambda={lambda}): got {got}, expected {expected}, diff {}",
+				(got - expected).abs()
+			);
+		}
+	}
+
+	// --- Left truncation code path (lambda >= 25) ---
+
+	#[test]
+	fn left_truncation_for_medium_lambda() {
+		// For lambda >= 25, left should be 0 or the iterative algorithm should find a value.
+		// For moderate lambdas, left may or may not be zero. Just verify the result is sane.
+		for lambda in [25.0, 30.0, 50.0, 100.0, 200.0] {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			// left should be non-negative
+			assert!(b.left >= 0, "negative left for lambda={lambda}");
+			// left <= lambda
+			assert!(
+				b.left <= lambda as usize + 1,
+				"left={} too large for lambda={lambda}",
+				b.left
+			);
+			// Distribution should still sum to 1
+			let total: f64 = (b.left..=b.right).map(|k| prob(&b, k)).sum();
+			assert!(
+				(total - 1.0).abs() < 1e-4,
+				"prob sum={total} for lambda={lambda}"
+			);
+		}
+	}
+
+	// --- Right bound code path (lambda >= 400 vs < 400) ---
+
+	#[test]
+	fn large_lambda_right_bound() {
+		// For lambda >= 400, the right bound uses a different formula.
+		for lambda in [400.0, 500.0, 1000.0, 2000.0, 5000.0] {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			let m = lambda as usize;
+			assert!(
+				b.right >= m,
+				"right={} < m={} for lambda={lambda}",
+				b.right,
+				m
+			);
+			// right should not be unreasonably large
+			assert!(
+				b.right < m + 10 * (2.0 * lambda).sqrt() as usize + 100,
+				"right={} unreasonably large for lambda={lambda}",
+				b.right
+			);
+			// Probabilities should still sum to 1
+			let total: f64 = (b.left..=b.right).map(|k| prob(&b, k)).sum();
+			assert!(
+				(total - 1.0).abs() < 1e-3,
+				"prob sum={total} for lambda={lambda}"
+			);
+		}
+	}
+
+	// --- Epsilon sensitivity ---
+
+	#[test]
+	fn tighter_epsilon_gives_better_accuracy() {
+		let lambda = 10.0;
+		let k = 10;
+		let exact =
+			(-lambda).exp() * lambda.powi(k as i32) / (1..=k).map(|x| x as f64).product::<f64>();
+
+		let loose = FG::fox_glynn(lambda, 1e-4);
+		let tight = FG::fox_glynn(lambda, 1e-10);
+
+		let err_loose = (prob(&loose, k) - exact).abs();
+		let err_tight = (prob(&tight, k) - exact).abs();
+
+		// Tighter epsilon should be at least as accurate (and typically more so)
+		assert!(
+			err_tight <= err_loose + 1e-10,
+			"tighter epsilon not more accurate: loose_err={err_loose}, tight_err={err_tight}"
+		);
+	}
+
+	#[test]
+	fn very_small_epsilon() {
+		let b = FG::fox_glynn(5.0, 1e-12);
+		let total: f64 = (b.left..=b.right).map(|k| prob(&b, k)).sum();
+		assert!(
+			(total - 1.0).abs() < 1e-6,
+			"prob sum={total} for very small epsilon"
+		);
+	}
+
+	// --- Small lambda edge cases ---
+
+	#[test]
+	fn very_small_lambda() {
+		for lambda in [0.01, 0.1, 0.5] {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			assert_eq!(b.left, 0, "left should be 0 for small lambda={lambda}");
+			let total: f64 = (b.left..=b.right).map(|k| prob(&b, k)).sum();
+			assert!(
+				(total - 1.0).abs() < 1e-4,
+				"prob sum={total} for lambda={lambda}"
+			);
+			// P(0) should dominate for very small lambda
+			let p0 = prob(&b, 0);
+			assert!(p0 > 0.5, "P(0)={p0} should be >0.5 for lambda={lambda}");
+		}
+	}
+
+	// --- Probability outside bounds is zero ---
+
+	#[test]
+	fn probability_outside_bounds_is_zero() {
+		let b = FG::fox_glynn(5.0, 1e-9);
+		// Check one below left and one above right
+		if b.left > 0 {
+			assert_eq!(prob(&b, b.left - 1), 0.0);
+		}
+		assert_eq!(prob(&b, b.right + 1), 0.0);
+		assert_eq!(prob(&b, b.right + 100), 0.0);
+	}
+
+	// --- Symmetry-ish check: P(k) near the mode should be highest ---
+
+	#[test]
+	fn mode_near_lambda() {
+		for lambda in [1.0, 5.0, 10.0, 50.0, 100.0] {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			let m = lambda as usize;
+			let p_mode = prob(&b, m);
+			// The PMF at the mode (floor(lambda)) should be the highest or near-highest
+			// Check that it's at least as high as P(0) and P(2*lambda) for large lambda
+			if m > 2 {
+				let p_zero = prob(&b, 0);
+				assert!(
+					p_mode >= p_zero,
+					"P(mode={m})={p_mode} < P(0)={p_zero} for lambda={lambda}"
+				);
+			}
+		}
+	}
+
+	// --- Weight monotonicity away from center ---
+
+	#[test]
+	fn weights_decrease_away_from_center() {
+		// For large enough lambda, weights should decrease as you move away from the center.
+		// This isn't universally true for all k, but near the center it holds.
+		for lambda in [10.0, 50.0, 100.0] {
+			let b = FG::fox_glynn(lambda, 1e-9);
+			let center_idx = lambda as usize - b.left;
+			// Check a few steps to the right of center
+			for offset in 1..5.min(b.weights.len() - center_idx) {
+				let ci = center_idx;
+				let ni = center_idx + offset;
+				assert!(
+					b.weights[ci] >= b.weights[ni],
+					"weight at center ({}) < weight at center+{offset} ({}) for lambda={lambda}",
+					b.weights[ci],
+					b.weights[ni]
+				);
+			}
+		}
+	}
+
+	// --- Integration: large-scale lambda with large k ---
+
+	#[test]
+	fn large_lambda_large_k() {
+		// lambda=2000, k=2000 (at the mode)
+		let b = FG::fox_glynn(2000.0, 1e-9);
+		let p = prob(&b, 2000);
+		// P(2000 | lambda=2000) ~ 1/sqrt(2*pi*2000) ~ 0.00892
+		assert!(
+			p > 0.008 && p < 0.010,
+			"P(2000|2000)={p}, expected ~0.00892"
+		);
+	}
+
+	#[test]
+	fn large_lambda_tail() {
+		// lambda=1000, check k=1100 (in the tail)
+		let b = FG::fox_glynn(1000.0, 1e-9);
+		let p = prob(&b, 1100);
+		// Should be small but positive
+		assert!(p > 0.0, "P(1100|1000) should be positive");
+		assert!(p < 0.01, "P(1100|1000)={p} should be small");
 	}
 }

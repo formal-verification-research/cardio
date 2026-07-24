@@ -7,7 +7,7 @@ use crate::*;
 
 use bitvec::prelude::*;
 use log::*;
-use num::traits::{real::Real, Bounded};
+use num::traits::{Bounded, real::Real};
 use sprs::{CsMat, CsVec, CsVecBase};
 
 use self::property::Interval;
@@ -67,6 +67,7 @@ where
 
 	pub fn reuniformize(&mut self, new_rate: f64, deadlock: &BitVec) {
 		let old_rate = 1.0 / self.epoch;
+		debug!("Reuniformizing {old_rate} -> {new_rate}");
 		reuniformize_ma(&mut self.uniformized_matrix, old_rate, new_rate, deadlock);
 	}
 }
@@ -246,11 +247,7 @@ impl CheckContext {
 				debug_assert!(a.is_finite() && b.is_finite());
 				debug_assert!(!a.is_nan() && !b.is_nan());
 				// Get the highest
-				if a > b {
-					a
-				} else {
-					b
-				}
+				if a > b { a } else { b }
 			})
 			.unwrap() * 1.2
 	}
@@ -320,16 +317,11 @@ impl CslChecker {
 	/// values are the nonzero probabilities and the states who have the labels we care about.
 	pub fn compute_transient(&self, context: &mut CheckContext) -> CsVec<f64> {
 		// TODO: more graceful handling if cannot read
-		let model = context.model_context.read().unwrap();
+		let mut model = context.model_context.write().unwrap();
 		// Get the new matrix with the new uniformization rate
-		let mut matrix = model.uniformized_matrix.clone();
 		let new_unif_rate = context.uniformization_rate();
-		reuniformize_ma(
-			&mut matrix,
-			1.0 / model.epoch,
-			new_unif_rate,
-			&context.deadlock,
-		);
+		model.reuniformize(new_unif_rate, &context.deadlock);
+		let matrix = model.uniformized_matrix.clone();
 
 		let lambda = model.epoch * context.time_bound;
 		// Return the initial distribution if no epochs pass.
@@ -392,32 +384,34 @@ impl CslChecker {
 			CsVec::empty(context.distribution.dim())
 		};
 
+		debug!("Got to line 387");
 		// An optimization shamelessly stolen from storm: if we don't have to use mixed poisson
 		// probabilities and our left fox-glynn result is > 1, we don't have to add anything and
 		// can just multiply in place.
-		if !self.use_mixed_poisson && fg_result.left > 1 {
-			for _i in 0..fg_result.left - 1 {
-				// We use this operation to take advantage of the MulAssign trait provided by the
-				// CsVec<f64>I type in the sprs crate.
-				result = &model.uniformized_matrix * &result;
-				// Unfortunately, I don't believe that there is an optimizable version of AddAssign
-				result = result + context.add_vec.clone();
-			}
-		} else if self.use_mixed_poisson {
-			let epoch = context.epoch();
-			// let add_scale = |a: f64, b: f64| a + b / epoch;
-			for _idx in 1..first_iteration {
-				// Multiply and then apply the scaling
-				context.distribution = &model.uniformized_matrix * &context.distribution;
-				result = &context.distribution + result.map(|elem| elem / epoch);
-			}
+		// if !self.use_mixed_poisson && fg_result.left > 1 {
+		// 	for _i in 0..fg_result.left - 1 {
+		// 		// We use this operation to take advantage of the MulAssign trait provided by the
+		// 		// CsVec<f64>I type in the sprs crate.
+		// 		result = &model.uniformized_matrix * &result;
+		// 		// Unfortunately, I don't believe that there is an optimizable version of AddAssign
+		// 		result = result + context.add_vec.clone();
+		// 	}
+		// } else if self.use_mixed_poisson {
+		// 	let epoch = context.epoch();
+		// 	// let add_scale = |a: f64, b: f64| a + b / epoch;
+		// 	for _idx in 1..first_iteration {
+		// 		// Multiply and then apply the scaling
+		// 		context.distribution = &model.uniformized_matrix * &context.distribution;
+		// 		result = &context.distribution + result.map(|elem| elem / epoch);
+		// 	}
+		//
+		// 	// scale values by total fox-glynn weight
+		// 	if fg_result.left > 0 {
+		// 		result.map_inplace(|val| *val * fg_result.total_weight);
+		// 	}
+		// }
 
-			// scale values by total fox-glynn weight
-			if fg_result.left > 0 {
-				result.map_inplace(|val| *val * fg_result.total_weight);
-			}
-		}
-
+		debug!("Got to line 414");
 		// In between the left and right fox glynn points, compute, scale and add results
 		for idx in first_iteration..=fg_result.right {
 			let weight = fg_result.weights[idx - fg_result.left];

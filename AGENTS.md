@@ -1,0 +1,53 @@
+# AGENTS.md
+
+## Repository Overview
+
+This repo contains the source code for Cardio. Cardio is a work in progress probabilistic model checker for continuous-time Markov chains which primarily focuses on bounded until properties specified in the CSL (continuous stochastic logic) format.
+
+Cardio is written in Rust and provides Python bindings via `pyo3`. The Python bindings are currently used for testing.
+
+## Testing instructions
+
+1. Tests will be done in Python. Ensure that a Python virtual environment is set up at the repository root. Then activate that virtual environment. Tests use `numpy`, `scipy`, `pytest` and `stormpy` (a different probabilistic model checking engine), so ensure that these are installed within the venv.
+2. From within the project root, run `maturin develop` to compile cardio and install it in the venv.
+3. Test files are located in `./tests`. Currently, the most interesting tests are `poisson.py` and `toy.py`. These are what we are trying to get to work.
+	- `toy.py` constructs a model and attempts to test it in cardio and compares it with stormpy. To just get the result from storm (known to be correct) run with `--bypass_cardio`. To get just Cardio's results, run with `--bypass_storm`.
+4. Rust unit tests can be run with `cargo test`.
+
+## Current debugging status
+
+- `tests/toy.py` is currently expected to fail when running Cardio's path (without `--bypass_cardio`). Our goal is to get this to not fail.
+	- Most likely, the issue is with uniformization or Fox-Glynn.
+- For LLM-assisted debugging, a useful flow is:
+	1. Run `python tests/toy.py --bypass_cardio` to confirm the Storm-only baseline.
+	2. Run `python tests/toy.py --bypass_storm` to isolate Cardio behavior.
+	3. Compare model construction and labels in `tests/common.py` against Cardio's checker path in `src/python.rs` and `src/checker.rs`.
+
+## Useful implementation context
+
+- The Python bindings currently expose:
+	- `cardio.QuantitativeReachabilityFinder` (for bounded-until style quantitative reachability checks).
+	- `cardio.util.fg_find` (Fox-Glynn Poisson truncation helper).
+- In the current explicit-state workflow, state index `0` is treated as absorbing and state index `1` is treated as the initial state.
+- The checker works over a uniformized matrix (`src/checker.rs`) and uses Fox-Glynn weights (`src/poisson.rs`) for transient bounded-time computations.
+- `tests/common.py` builds the same model for both Cardio and StormPy, which is useful when comparing mismatches.
+- `src/model.rs` exists in addition to the files listed below and contains model-type definitions and sparse model data structures.
+
+## General Repo Guidance
+
+- Formatting:
+	- With the exception of markdown, we prefer tabs over spaces. For rust code, we provide formatting rules in `rustfmt.toml`. Python formatting is less strict.
+
+## Where things are in code
+
+From within `src`, there are a few files that encapsulate different functionality:
+
+1. `checker.rs`: The main file that does the heavy lifting. Performs iteration on the uniformized matrix.
+2. `labels.rs`: The file that contains definitions for CTMC state and transition labels.
+3. `lib.rs`: Root of the cardio library.
+4. `matrix.rs`: Creates uniformized sparse matrix
+5. `parser.rs`: Parses CSL and eventually other formats including model formats like PRISM and JANI.
+6. `poisson.rs`: An implementation of Fox-Glynn
+7. `property.rs`: Defines CSL properties
+8. `python.rs`: Defines the Python bindings
+9. `rewards.rs`: Defines state and transition rewards

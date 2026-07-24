@@ -112,27 +112,19 @@ pub fn reuniformize_ma(
 	}
 	let diff = new_unif_rate - old_unif_rate;
 	let ratio = old_unif_rate / new_unif_rate;
-	let mut row: usize = 0;
-	for deadlock_index in deadlock.iter_ones() {
-		for (col_idx, mut col) in matrix.outer_iterator_mut().enumerate() {
-			debug!("Row: {}", row);
-			let val = col.get(row).unwrap_or(&0.0);
-			if *val != 0.0 {
-				col[row] = if col_idx == deadlock_index {
-					// Compute new self loop
-					let sloop = diff + val * old_unif_rate;
-					sloop / new_unif_rate
-				} else {
-					val * ratio
-				}
+
+	// Iterate over columns
+	for (col_idx, mut col) in matrix.outer_iterator_mut().enumerate() {
+		for (row_idx, mut val_ref) in col.iter_mut() {
+			if row_idx == col_idx {
+				*val_ref -= 1.0;
+				*val_ref *= ratio;
+				*val_ref += 1.0;
+			} else {
+				*val_ref *= ratio;
 			}
-			row += 1;
 		}
 	}
-	assert!(row == matrix.rows());
-	// for step in steps.iter_mut() {
-	// 	step.1 *= ratio;
-	// }
 }
 
 /// A trait that represents any type of sparse matrix construction.
