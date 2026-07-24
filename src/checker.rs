@@ -316,16 +316,11 @@ impl CslChecker {
 	/// values are the nonzero probabilities and the states who have the labels we care about.
 	pub fn compute_transient(&self, context: &mut CheckContext) -> CsVec<f64> {
 		// TODO: more graceful handling if cannot read
-		let model = context.model_context.read().unwrap();
+		let mut model = context.model_context.write().unwrap();
 		// Get the new matrix with the new uniformization rate
-		let mut matrix = model.uniformized_matrix.clone();
 		let new_unif_rate = context.uniformization_rate();
-		reuniformize_ma(
-			&mut matrix,
-			1.0 / model.epoch,
-			new_unif_rate,
-			&context.deadlock,
-		);
+		model.reuniformize(new_unif_rate, &context.deadlock);
+		let matrix = model.uniformized_matrix.clone();
 
 		let lambda = model.epoch * context.time_bound;
 		// Return the initial distribution if no epochs pass.

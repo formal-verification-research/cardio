@@ -126,8 +126,8 @@ pub fn reuniformize_ma(
 					val * ratio
 				}
 			}
-			row += 1;
 		}
+		row += 1;
 	}
 	assert!(row == matrix.rows());
 	// for step in steps.iter_mut() {
