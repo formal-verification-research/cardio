@@ -243,4 +243,13 @@ mod kani_proofs {
 		labels.add_label_to_state(1, 0);
 		assert!(labels.state_has_label(0, 1));
 	}
+
+
+
+	#[kani::proof]
+	#[kani::unwind(4)]
+	fn index_to_label_out_of_range() {
+		let labels = Labels::with_abs_and_sat();
+		assert!(labels.index_to_label(2) == None);
+	}
 }
