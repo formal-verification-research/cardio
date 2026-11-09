@@ -1,4 +1,4 @@
-use crate::matrix::{CheckableNumber, SprsMatBuilder};
+use crate::matrix::SprsMatBuilder;
 use crate::rewards;
 
 /// The allowed types of model. Currently, there are only two options, but as Cardio expands, we
@@ -9,16 +9,6 @@ pub enum ModelType {
 	ContinuousTime(f64),
 	/// A Discrete-time Markov Chain (DTMC)
 	DiscreteTime,
-}
-
-trait Model {
-	type MatrixType;
-
-	fn model_type(&self) -> ModelType;
-	/// Returns the uniformized DTMC if a continuous time, along with the epoch size. If it's a
-	/// DTMC, then the epoch will be `1.0` and the matrix returned will just be the probability
-	/// matrix. The result of this function is intended to be used in the model check functions.
-	fn unif_prob_matrix(&self) -> (Option<f64>, Self::MatrixType);
 }
 
 /// An explicit model, stored in sparse format.
@@ -32,6 +22,21 @@ pub struct SparseModel {
 }
 
 impl SparseModel {
+	/// Returns the model type.
+	pub fn model_type(&self) -> ModelType {
+		self.mod_type
+	}
+
+	/// Returns a reference to the underlying (uniformized) transition matrix.
+	pub fn transition_matrix(&self) -> &sprs::CsMat<f64> {
+		&self.transition_matrix
+	}
+
+	/// Returns the rewards structures associated with this model, if any.
+	pub fn rewards(&self) -> Option<&Vec<rewards::ExplicitRewards>> {
+		self.rewards_structures.as_ref()
+	}
+
 	/// Less efficient than it could be since the sparse matrix is cloned
 	pub fn new(mat_builder: &mut impl SprsMatBuilder, continuous_time: bool) -> Self {
 		if continuous_time {
@@ -73,21 +78,3 @@ impl SparseModel {
 	}
 }
 
-impl Model for SparseModel {
-	type MatrixType = sprs::CsMat<f64>;
-
-	fn model_type(&self) -> ModelType {
-		self.mod_type.clone()
-	}
-
-	fn unif_prob_matrix(&self) -> (Option<f64>, Self::MatrixType) {
-		match &self.mod_type {
-			ModelType::DiscreteTime => (None, self.transition_matrix.clone()),
-			ModelType::ContinuousTime(epoch) => {
-				// If it's a continuous-time matrix, we assume that the transition matrix is the
-				// infantesimile generator matrix, Q.
-				unimplemented!()
-			}
-		}
-	}
-}

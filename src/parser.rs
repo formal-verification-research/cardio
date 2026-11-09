@@ -1,6 +1,5 @@
 use logos::Logos;
 
-use crate::matrix::CheckableNumber;
 use crate::property::{Interval, PathFormula, ProbabilityQueryType, StateFormula};
 
 #[derive(Logos, Debug, PartialEq, Clone)]
