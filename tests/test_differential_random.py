@@ -12,7 +12,7 @@ except Exception:
     HAS_STORM = False
 
 SEED = 20240517
-N_CASES = 100
+N_CASES = 200
 
 
 def _make_case(rng):

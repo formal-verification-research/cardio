@@ -1,5 +1,7 @@
 import math
 
+import cardio
+
 import numpy as np
 
 from common import Model, Transition
@@ -129,3 +131,69 @@ def test_small_time_bound():
     model = Model(init, transitions, 3, lambda st: st[0, 0] >= 2)
     res = model.check_cardio_and_storm(1e-3, bypass_cardio=False, bypass_storm=False)
     _assert(res)
+
+
+# Interval and next-step tests (simple rate-1 absorption chain)
+
+@pytest.mark.skipif(not HAS_STORM, reason="stormpy not available")
+def test_window_simple():
+    import math
+    import stormpy
+    rf = cardio.QuantitativeReachabilityFinder()
+    rf.insert(1, 0, 1.0)
+    rf.set_state_satisfying(0)
+    c = rf.build_matrix_and_get_window(0.2, 1.0)
+    # Storm reference
+    builder = stormpy.SparseMatrixBuilder(2, 2)
+    builder.add_next_value(0, 0, 1.0)
+    builder.add_next_value(1, 0, 1.0)
+    m = builder.build()
+    labels = stormpy.StateLabeling(2)
+    labels.add_label("absorbing")
+    labels.add_label("satisfying")
+    labels.add_label("init")
+    labels.add_label_to_state("absorbing", 0)
+    labels.add_label_to_state("satisfying", 0)
+    labels.add_label_to_state("init", 1)
+    comps = stormpy.SparseModelComponents(m, labels, {}, rate_transitions=True)
+    ctmc = stormpy.SparseCtmc(comps)
+    prop = stormpy.parse_properties('P=? [ true U[0.2, 1.0] "satisfying" ]')[0]
+    res = stormpy.check_model_sparse(ctmc, prop, only_initial_states=True)
+    s = res.at(1)
+    assert abs(c - s) < 1e-6, (c, s)
+
+
+@pytest.mark.skipif(not HAS_STORM, reason="stormpy not available")
+def test_lower_simple():
+    import math
+    import stormpy
+    rf = cardio.QuantitativeReachabilityFinder()
+    rf.insert(1, 0, 1.0)
+    rf.set_state_satisfying(0)
+    c = rf.build_matrix_and_get_lower(0.5)
+    builder = stormpy.SparseMatrixBuilder(2, 2)
+    builder.add_next_value(0, 0, 1.0)
+    builder.add_next_value(1, 0, 1.0)
+    m = builder.build()
+    labels = stormpy.StateLabeling(2)
+    labels.add_label("absorbing")
+    labels.add_label("satisfying")
+    labels.add_label("init")
+    labels.add_label_to_state("absorbing", 0)
+    labels.add_label_to_state("satisfying", 0)
+    labels.add_label_to_state("init", 1)
+    comps = stormpy.SparseModelComponents(m, labels, {}, rate_transitions=True)
+    ctmc = stormpy.SparseCtmc(comps)
+    prop = stormpy.parse_properties('P=? [ true U[0.5, 100] "satisfying" ]')[0]
+    res = stormpy.check_model_sparse(ctmc, prop, only_initial_states=True)
+    s = res.at(1)
+    assert abs(c - s) < 1e-5, (c, s)
+
+
+@pytest.mark.skipif(not HAS_STORM, reason="stormpy not available")
+def test_next_simple():
+    rf = cardio.QuantitativeReachabilityFinder()
+    rf.insert(1, 0, 1.0)
+    rf.set_state_satisfying(0)
+    c = rf.build_matrix_and_get_next()
+    assert abs(c - 1.0) < 1e-6, c
