@@ -84,6 +84,9 @@ impl Labels {
 	pub fn add_label_to_state(&mut self, label_index: usize, state_index: usize) {
 		let label_count = self.label_count();
 		assert!(label_index < label_count);
+		if self.state_labelling.is_none() {
+			self.state_labelling = Some(Vec::new());
+		}
 		if let Some(labelling) = &mut self.state_labelling {
 			// Resize the state labelling to the state index we've seen.
 			let empty_labelling = vec![false; label_count];
@@ -99,8 +102,6 @@ impl Labels {
 				labelling[state_index][label_index] = true;
 				self.label_names[label_index].1 += 1;
 			}
-		} else {
-			unimplemented!(); // Should we panic or create the state labelling?
 		}
 	}
 

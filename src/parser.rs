@@ -10,9 +10,9 @@ pub enum Token {
 	True,
 	#[regex(r"false")]
 	False,
-	#[regex(r"[0-9]+", |lex| lex.slice().parse::<i64>().unwrap())]
+	#[regex(r"[0-9]+", |lex| lex.slice().parse::<i64>().unwrap_or(0))]
 	Integer(i64),
-	#[regex(r"[0-9]+\.[0-9]*", |lex| lex.slice().parse::<f64>().unwrap())]
+	#[regex(r"[0-9]+\.[0-9]*", |lex| lex.slice().parse::<f64>().unwrap_or(0.0))]
 	Float(f64),
 	#[token("+")]
 	Plus,
