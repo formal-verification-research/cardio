@@ -250,6 +250,9 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 
 	/// Inserts or replaces a value at the position `row, col` in the matrix.
 	fn insert(&mut self, row: usize, col: usize, entry: f64) -> Result<(), String> {
+		// Even zero entries establish the existence of a state index, so the
+		// logical state count must account for them (they are simply not stored).
+		self.state_count = self.state_count.max(row + 1).max(col + 1);
 		// No need to add if the entry is zero
 		if entry == 0.0 {
 			return Ok(());

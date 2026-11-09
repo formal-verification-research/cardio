@@ -48,6 +48,12 @@ class Model:
 		# Create matrices for cardio and storm
 		cardio_rf = cardio.QuantitativeReachabilityFinder()
 		stormpy_mat = None if bypass_storm else stormpy.SparseMatrixBuilder()
+		# Absorbing state (index 0) self-loop, added first to keep Storm row order.
+		cardio_rf.insert(0, 0, 1.0)
+		if not bypass_storm:
+			stormpy_mat.add_next_value(0, 0, 1.0)
+			# Ensure state 1 (initial) contributes a column even if never a destination.
+			stormpy_mat.add_next_value(0, 1, 0.0)
 
 		sat_indecies = []
 
@@ -72,7 +78,13 @@ class Model:
 					stormpy_mat.add_next_value(cur_idx, cur_idx, 1.0)
 				continue
 			updates = self.next_states(cur_state)
-			assert (len(updates) > 0)
+			if len(updates) == 0:
+				# Deadlock state: treat as absorbing self-loop (rate 1.0) for
+				# matrix dimension consistency between Cardio and Storm.
+				cardio_rf.insert(cur_idx, cur_idx, 1.0)
+				if not bypass_storm:
+					stormpy_mat.add_next_value(cur_idx, cur_idx, 1.0)
+				continue
 			# print("updates:", ' '.join([f"{update[0].T}, {rate}" for update, rate in updates]))
 			absorbing_rate = 0
 			for next_state, rate in updates:
@@ -96,8 +108,14 @@ class Model:
 					queue.append(next_state)
 					# Update next available index
 					next_available_index += 1
-				# Add to both matrices
-				cardio_rf.insert(cur_idx, next_idx, rate)
+					# Ensure the new state contributes a column in Storm's matrix
+					# (added on the current row to keep Storm's row order).
+					if not bypass_storm:
+						stormpy_mat.add_next_value(cur_idx, next_idx, 0.0)
+				# Add to both matrices. Cardio's insert overwrites, so accumulate
+				# manually to match Storm's add_next_value semantics.
+				existing = cardio_rf.get_value(cur_idx, next_idx)
+				cardio_rf.insert(cur_idx, next_idx, (existing if existing is not None else 0.0) + rate)
 				if not bypass_storm:
 					stormpy_mat.add_next_value(cur_idx, next_idx, rate)
 			# Insert transition to absorbing state
