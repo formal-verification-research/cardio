@@ -1,6 +1,7 @@
 // Python bindings
 #[pyo3::pymodule]
 mod cardio {
+	use rayon;
 	use crate::{
 		checker::{CheckContext, CslChecker},
 		labels::Labels,
@@ -79,8 +80,9 @@ mod cardio {
 			let csl_checker: CslChecker = CslChecker::default();
 			let interval = Interval::TimeBoundedUpper(time_bound);
 
-			// Lower bound: probability of reaching a satisfying state.
-			let mut check_context: CheckContext = CheckContext::initialize_with_abs(
+			// Build both check contexts up front so the two bounds can be computed
+			// in parallel (they are independent).
+			let lower_ctx = CheckContext::initialize_with_abs(
 				&model_context,
 				time_bound,
 				1e-9,
@@ -89,16 +91,7 @@ mod cardio {
 				deadlock_idxes.clone(),
 				exit_rates.clone(),
 			);
-			let dist_lower = csl_checker.compute_until(
-				&mut check_context,
-				interval,
-				phi_mask.clone(),
-				psi_sat.clone(),
-			);
-			let lower_bound = dist_lower.get(1).copied().unwrap_or(0.0);
-
-			// Upper bound: also count paths that are absorbed before satisfying.
-			let mut check_context: CheckContext = CheckContext::initialize_with_abs(
+			let upper_ctx = CheckContext::initialize_with_abs(
 				&model_context,
 				time_bound,
 				1e-9,
@@ -107,8 +100,20 @@ mod cardio {
 				deadlock_idxes,
 				exit_rates,
 			);
-			let dist_abs =
-				csl_checker.compute_until(&mut check_context, interval, phi_mask, psi_abs);
+
+			let phi_lower = phi_mask.clone();
+			let phi_upper = phi_mask.clone();
+			let (dist_lower, dist_abs) = rayon::join(
+				|| {
+					let mut ctx = lower_ctx;
+					csl_checker.compute_until(&mut ctx, interval, phi_lower, psi_sat.clone())
+				},
+				|| {
+					let mut ctx = upper_ctx;
+					csl_checker.compute_until(&mut ctx, interval, phi_upper, psi_abs.clone())
+				},
+			);
+			let lower_bound = dist_lower.get(1).copied().unwrap_or(0.0);
 			let absorption_prob = dist_abs.get(1).copied().unwrap_or(0.0);
 			let upper_bound = lower_bound + absorption_prob;
 

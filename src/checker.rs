@@ -705,20 +705,28 @@ impl CslChecker {
 					}
 				}
 
+				// Precompute the triplets belonging to active (phi & !psi) rows so the
+				// hot apply loop avoids per-triplet branching.
+				let mut active_entries: Vec<(usize, usize, f64)> = Vec::new();
+				for (val, (row, col)) in matrix.iter() {
+					if row < n && col < n && is_phi[row] && !is_psi[row] {
+						active_entries.push((row, col, *val));
+					}
+				}
+				let mut active_rows: Vec<usize> = active_entries.iter().map(|(r, _, _)| *r).collect();
+				active_rows.sort_unstable();
+				active_rows.dedup();
+
 				// Apply the absorbing (phi/psi) uniformized matrix to a vector.
 				let apply = |v: &Vec<f64>| -> Vec<f64> {
-					let mut res = vec![0.0f64; n];
-					// Absorbing rows: psi or !phi -> identity.
-					for i in 0..n {
-						if is_psi[i] || !is_phi[i] {
-							res[i] = v[i];
-						}
+					// Absorbing rows (psi or !phi) keep their value; active rows are
+					// overwritten by the matrix row.
+					let mut res = v.clone();
+					for r in &active_rows {
+						res[*r] = 0.0;
 					}
-					// phi & !psi rows: original matrix row.
-					for (val, (row, col)) in matrix.iter() {
-						if is_phi[row] && !is_psi[row] {
-							res[row] += *val * v[col];
-						}
+					for (row, col, val) in &active_entries {
+						res[*row] += *val * v[*col];
 					}
 					res
 				};
@@ -733,8 +741,8 @@ impl CslChecker {
 				let mut acc = vec![0.0f64; n];
 				for k in 0..=(fg_result.right - fg_result.left) {
 					let weight = fg_result.weights[k];
-					for i in 0..n {
-						acc[i] += weight * v[i];
+					for (a, vi) in acc.iter_mut().zip(v.iter()) {
+						*a += weight * *vi;
 					}
 					v = apply(&v);
 				}
