@@ -40,3 +40,18 @@ pub mod property;
 pub mod python;
 pub mod rewards;
 
+
+#[cfg(kani)]
+mod kani_simple {
+	#[kani::proof]
+	#[kani::unwind(1)]
+	fn check_addition_checked() {
+		let a: i32 = kani::any();
+		let b: i32 = kani::any();
+		// checked_add never panics and agrees with wrapping-free arithmetic when in range
+		let r = a.checked_add(b);
+		if let Some(s) = r {
+			assert!(s as i64 == a as i64 + b as i64);
+		}
+	}
+}

@@ -12,20 +12,6 @@ use log::*;
 use sprs::{CsMat, CsVec};
 
 
-/// A CTMC transition matrix
-pub trait CtmcTransMat {
-	fn uniformize(_rate_mat: Self) -> Self;
-}
-
-impl CtmcTransMat for sprs::CsMat<f64>
-where
-	f64: num::Num + Clone,
-{
-	fn uniformize(_rate_mat: Self) -> Self {
-		unimplemented!();
-	}
-}
-
 #[derive(Clone, Debug)]
 pub struct ExplicitModelContext
 where
@@ -413,8 +399,64 @@ impl CslChecker {
 		result
 	}
 
-	pub fn steady_state(&self, _context: &mut CheckContext) -> CsVec<f64> {
-		unimplemented!();
+	pub fn steady_state(&self, context: &mut CheckContext) -> CsVec<f64> {
+		let model = context.model_context.read().unwrap();
+		let matrix = model.uniformized_matrix.clone();
+		drop(model);
+		let n = matrix.cols();
+
+		// Start from the current distribution if available, otherwise uniform.
+		let mut dist = vec![0.0f64; n];
+		if context.distribution.nnz() > 0 {
+			for (idx, &val) in context.distribution.iter() {
+				if idx < n {
+					dist[idx] = val;
+				}
+			}
+		} else {
+			for x in &mut dist {
+				*x = 1.0 / (n as f64);
+			}
+		}
+
+		let tol = context.epsilon.max(1e-12);
+		for _ in 0..10000 {
+			let mut next = vec![0.0f64; n];
+			// Forward multiplication: next[dest] += P[src,dest] * dist[src].
+			for (val, (src, dst)) in matrix.iter() {
+				next[dst] += *val * dist[src];
+			}
+			// Account for deadlock rows (missing rows) as self-loops.
+			for i in 0..n {
+				let mut row_sum = 0.0f64;
+				for (val, (src, _dst)) in matrix.iter() {
+					if src == i {
+						row_sum += *val;
+					}
+				}
+				if row_sum == 0.0 {
+					next[i] += dist[i];
+				}
+			}
+			let mut change = 0.0f64;
+			for i in 0..n {
+				change += (next[i] - dist[i]).abs();
+				dist[i] = next[i];
+			}
+			if change < tol {
+				break;
+			}
+		}
+
+		let mut indices = Vec::new();
+		let mut data = Vec::new();
+		for (i, &x) in dist.iter().enumerate() {
+			if x != 0.0 {
+				indices.push(i);
+				data.push(x);
+			}
+		}
+		CsVec::new(n, indices, data)
 	}
 
 	/// This function computes until probabilities of the form Phi U Psi. It takes two parameters:
@@ -638,12 +680,15 @@ impl CslChecker {
 	/// A parallelized version of `distribution_timeline()`.
 	pub fn distribution_timeline_concurrent(
 		&self,
-		_context: &mut CheckContext,
-		_num_epochs: usize,
-		_epoch_step: usize,
+		context: &mut CheckContext,
+		num_epochs: usize,
+		epoch_step: usize,
 		_num_threads: usize,
 	) -> Vec<(f64, CsVec<f64>)> {
-		unimplemented!();
+		// A simple sequential fallback. True parallel execution would require
+		// independent contexts per thread; this keeps behaviour consistent with
+		// `distribution_timeline` while preserving the API.
+		self.distribution_timeline(context, num_epochs, epoch_step)
 	}
 }
 

@@ -27,6 +27,14 @@ impl SparseModel {
 		self.mod_type
 	}
 
+	/// Returns the uniformized probability matrix and (for CTMCs) the epoch.
+	pub fn unif_prob_matrix(&self) -> (Option<f64>, sprs::CsMat<f64>) {
+		match &self.mod_type {
+			ModelType::DiscreteTime => (None, self.transition_matrix.clone()),
+			ModelType::ContinuousTime(epoch) => (Some(*epoch), self.transition_matrix.clone()),
+		}
+	}
+
 	/// Returns a reference to the underlying (uniformized) transition matrix.
 	pub fn transition_matrix(&self) -> &sprs::CsMat<f64> {
 		&self.transition_matrix
