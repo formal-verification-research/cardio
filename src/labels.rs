@@ -8,7 +8,7 @@ pub struct Labels {
 	label_names: Vec<(String, usize)>,
 	/// The state labelling is an option since after we've constructed it, no more labels can be
 	/// added, otherwise we'd have to re-initialize every bitvec in the state labeling.
-	state_labelling: Option<Vec<BitVec>>,
+	state_labelling: Option<Vec<Vec<bool>>>,
 }
 
 impl Default for Labels {
@@ -86,18 +86,17 @@ impl Labels {
 		assert!(label_index < label_count);
 		if let Some(labelling) = &mut self.state_labelling {
 			// Resize the state labelling to the state index we've seen.
-			let mut empty_labelling = BitVec::with_capacity(label_count);
-			empty_labelling.resize(label_count, false);
+			let empty_labelling = vec![false; label_count];
 			labelling.resize(
 				labelling.len().max(state_index + 1),
 				empty_labelling.clone(),
 			);
 			// Update the count of labels and set the bit if it is not already set.
-			if label_index >= labelling[state_index].len() {
+			if labelling[state_index].len() < label_count {
 				labelling[state_index].resize(label_count, false);
 			}
 			if !labelling[state_index][label_index] {
-				labelling[state_index].set(label_index, true);
+				labelling[state_index][label_index] = true;
 				self.label_names[label_index].1 += 1;
 			}
 		} else {
@@ -115,8 +114,10 @@ impl Labels {
 		if let Some(labelling) = &self.state_labelling {
 			if state_index >= labelling.len() {
 				false
+			} else if label_index >= labelling[state_index].len() {
+				false
 			} else {
-				*labelling[state_index].get(label_index).as_deref().unwrap()
+				labelling[state_index][label_index]
 			}
 		} else {
 			false
@@ -132,7 +133,14 @@ impl Labels {
 			if state_index >= labelling.len() {
 				false
 			} else {
-				labelling[state_index].clone() & label_bitmask == label_bitmask.as_bitslice()
+				for i in 0..label_bitmask.len() {
+					if label_bitmask.get(i).as_deref().copied().unwrap_or(false)
+						&& !labelling[state_index].get(i).copied().unwrap_or(false)
+					{
+						return false;
+					}
+				}
+				true
 			}
 		} else {
 			false
@@ -212,4 +220,19 @@ mod label_tests {
 			let _ = labels.state_has_label(i + 2, i % 2);
 		}
 	}
+}
+
+#[cfg(kani)]
+mod kani_proofs {
+	use super::*;
+
+	#[kani::proof]
+	#[kani::unwind(4)]
+	fn index_to_label_in_bounds() {
+		let labels = Labels::with_abs_and_sat();
+		let idx: usize = kani::any();
+		kani::assume(idx < labels.label_count());
+		assert!(labels.index_to_label(idx).is_some());
+	}
+
 }

@@ -518,7 +518,31 @@ impl SprsMatBuilder for ExplicitSprsMatBuilder {
 	}
 
 	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
-		unimplemented!();
+		let state_count = self.rows().max(self.cols());
+		// Compute row sums and epoch (max row sum).
+		let mut row_sums = vec![0.0f64; state_count];
+		for i in 0..self.data().len() {
+			let row = self.row_inds()[i];
+			let val = self.data()[i];
+			if row < state_count {
+				row_sums[row] += val;
+			}
+		}
+		let mut epoch = row_sums.iter().copied().fold(0.0f64, f64::max);
+		if epoch == 0.0 {
+			epoch = 1.0;
+		}
+		let mut m = sprs::TriMat::new((state_count, state_count));
+		for i in 0..self.data().len() {
+			let row = self.row_inds()[i];
+			let col = self.col_inds()[i];
+			let val = self.data()[i];
+			m.add_triplet(row, col, val / epoch);
+		}
+		for row in 0..state_count {
+			m.add_triplet(row, row, 1.0 - row_sums[row] / epoch);
+		}
+		(epoch, m.to_csc())
 	}
 
 	fn to_emb_dtmc(&mut self) -> (f64, sprs::CsMat<f64>) {

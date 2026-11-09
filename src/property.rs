@@ -78,9 +78,20 @@ impl AtomicExpression {
 		match self {
 			// If a variable or a value, we can't simplify
 			Self::Value(_) | Self::Variable(_) => self.clone(),
-			// Here we can try to simplify it
-			Self::BinaryOperator(_op, _lhs, _rhs) => {
-				unimplemented!()
+			// Constant-fold when both operands are known values.
+			Self::BinaryOperator(op, lhs, rhs) => {
+				let l = lhs.simplify();
+				let r = rhs.simplify();
+				if let (Some(lv), Some(rv)) = (l.evaluate_value(), r.evaluate_value()) {
+					let res = match op {
+						BinaryApOperator::Plus => lv + rv,
+						BinaryApOperator::Minus => lv - rv,
+						BinaryApOperator::Multipy => lv * rv,
+					};
+					Self::Value(res)
+				} else {
+					Self::BinaryOperator(*op, Box::new(l), Box::new(r))
+				}
 			}
 		}
 	}
@@ -124,8 +135,10 @@ impl Property for AtomicProposition {
 	where
 		Self: Sized,
 	{
-		let _tokens = lex(input);
-		unimplemented!();
+		// Atomic proposition parsing is not yet implemented; return an error rather
+		// than panicking so callers can handle it gracefully.
+		let _ = lex(input);
+		Err("AtomicProposition parsing is not yet implemented".to_string())
 	}
 }
 

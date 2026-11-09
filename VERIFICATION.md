@@ -50,7 +50,7 @@ python tests/toy.py
 | `evaluate_value_minus_no_panic` | `src/property.rs` | Verified | Subtraction correctness |
 | `evaluate_value_plus_no_panic` | `src/property.rs` | Verified | Addition correctness |
 | `evaluate_value_multiply_no_panic` | `src/property.rs` | Verified | Multiplication correctness |
-| Labels bitvec proofs | `src/labels.rs` | Not attempted | BitVec-heavy; Kani does not terminate in reasonable time |
+| Labels `index_to_label` | `src/labels.rs` | Verified (Kani) | Unwind 4 |
 
 Run a single harness with:
 ```bash
