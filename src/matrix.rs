@@ -598,3 +598,24 @@ mod matrix_tests {
 		}
 	}
 }
+
+
+#[cfg(test)]
+mod unif_matrix_tests {
+	use super::*;
+
+	#[test]
+	fn rows_sum_to_one() {
+		let mut mb = OptimalSprsMatBuilder::new();
+		mb.insert(1, 0, 1.0);
+		let (epoch, m) = mb.to_unif_matrix();
+		assert!((epoch - 1.0).abs() < 1e-12);
+		for row in 0..m.rows() {
+			let mut sum = 0.0;
+			for col in 0..m.cols() {
+				sum += m.get(row, col).copied().unwrap_or(0.0);
+			}
+			assert!((sum - 1.0).abs() < 1e-9, "row {} sum {}", row, sum);
+		}
+	}
+}

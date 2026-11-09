@@ -171,3 +171,17 @@ impl ToString for Labels {
 		}
 	}
 }
+
+#[cfg(test)]
+mod label_tests {
+	use super::*;
+
+	#[test]
+	fn add_label_to_state_sets_bit() {
+		let mut labels = Labels::with_abs_and_sat();
+		assert!(labels.state_has_label(0, 0));
+		labels.add_label_to_state(1, 2);
+		assert!(labels.state_has_label(2, 1));
+		assert!(!labels.state_has_label(2, 0));
+	}
+}

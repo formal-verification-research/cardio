@@ -675,3 +675,29 @@ mod checker_tests {
 }
 
 
+
+#[cfg(test)]
+mod until_tests {
+	use super::*;
+	use crate::labels::Labels;
+	use crate::matrix::{OptimalSprsMatBuilder, SprsMatBuilder};
+
+	#[test]
+	fn simple_absorption_probability() {
+		let mut mb = OptimalSprsMatBuilder::new();
+		mb.insert(1, 0, 1.0);
+		let mut labels = Labels::with_abs_and_sat();
+		let mc = mb.to_model_context(&labels, false);
+		let phi_mask = labels.create_label_bitmask(vec![]);
+		let psi_mask = labels.create_label_bitmask(vec!["absorbing".to_string()]);
+		let relevant = labels.create_relevant(&phi_mask, mc.state_count());
+		let deadlock = mb.get_deadlocks();
+		let exit_rates = mb.row_sum_vec();
+		let mut ctx = CheckContext::initialize_with_abs(&mc, 1.0, 1e-9, relevant.clone(), relevant.clone(), deadlock, exit_rates);
+		let checker = CslChecker::default();
+		let interval = Interval::TimeBoundedUpper(1.0);
+		let dist = checker.compute_until(&mut ctx, interval, phi_mask, psi_mask);
+		let p = dist.get(1).copied().unwrap_or(0.0);
+		assert!((p - 0.6321205588285577).abs() < 1e-6, "got {}", p);
+	}
+}
