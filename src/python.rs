@@ -10,6 +10,7 @@ mod cardio {
 	use log::*;
 	use pyo3::prelude::*;
 
+	/// Builds a CTMC from explicit transitions and computes bounded-until reachability bounds.
 	#[pyclass]
 	pub struct QuantitativeReachabilityFinder {
 		matrix_builder: OptimalSprsMatBuilder,
@@ -19,6 +20,7 @@ mod cardio {
 
 	#[pymethods]
 	impl QuantitativeReachabilityFinder {
+		/// Create a new, empty reachability finder.
 		#[new]
 		pub fn new() -> Self {
 			Self {
@@ -28,19 +30,23 @@ mod cardio {
 			}
 		}
 
+		/// Insert a transition rate `entry` from `row` to `col`.
 		pub fn insert(&mut self, row: usize, col: usize, entry: f64) {
 			self.matrix_builder.insert(row, col, entry);
 		}
 
+		/// Get the stored rate at (`row`, `col`), if any.
 		pub fn get_value(&mut self, row: usize, col: usize) -> Option<f64> {
 			self.matrix_builder.get_value(row, col)
 		}
 
+		/// Mark a state as satisfying the target predicate.
 		pub fn set_state_satisfying(&mut self, state_index: usize) {
 			self.satisfying_state_count += 1;
 			self.labelling.add_label_to_state(1, state_index);
 		}
 
+		/// Build the uniformized matrix and return (lower_bound, upper_bound) reachability.
 		pub fn build_matrix_and_get_bounds(&mut self, time_bound: f64) -> (f64, f64) {
 			let _ = env_logger::try_init();
 			debug!("Satisfying state count: {}", self.satisfying_state_count);
@@ -106,6 +112,7 @@ mod cardio {
 	#[pyo3::pymodule]
 	mod util {
 		use crate::poisson::FoxGlynnBound;
+		/// Fox-Glynn truncation helper. Returns (left, right, total_weight, weights).
 		#[pyo3::pyfunction]
 		pub fn fg_find(lambda: f64, epsilon: f64) -> (usize, usize, f64, Vec<f64>) {
 			let bound = FoxGlynnBound::<f64>::fox_glynn(lambda, epsilon);
