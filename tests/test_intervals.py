@@ -1,5 +1,7 @@
 import math
 
+import pytest
+
 import cardio
 
 try:
@@ -36,6 +38,7 @@ def _storm_bounds(time_bound_kind, a, b=None):
     return res.at(1)
 
 
+@pytest.mark.skipif(not HAS_STORM, reason="stormpy not available")
 def test_window_matches_storm():
     rf = cardio.QuantitativeReachabilityFinder()
     rf.insert(1, 0, 1.0)
@@ -50,6 +53,7 @@ def test_window_matches_storm():
         assert abs(c - expected) < 1e-6, (c, expected)
 
 
+@pytest.mark.skipif(not HAS_STORM, reason="stormpy not available")
 def test_lower_matches_storm():
     rf = cardio.QuantitativeReachabilityFinder()
     rf.insert(1, 0, 1.0)
