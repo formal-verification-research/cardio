@@ -35,6 +35,21 @@ fn checked_mul_spec(a: i64, b: i64) -> (r: Option<i64>)
 {
     a.checked_mul(b)
 }
+
+// Mirror of AtomicExpression::simplify constant-folding for addition.
+fn simplify_add(a: i64, b: i64) -> (r: i64)
+    requires a as int + b as int <= i64::MAX as int && a as int + b as int >= i64::MIN as int,
+    ensures r as int == a as int + b as int,
+{
+    a + b
+}
+
+fn abs_i64(x: i64) -> (r: i64)
+    requires x > i64::MIN,
+    ensures r >= 0,
+{
+    if x < 0 { -x } else { x }
+}
 }
 
 fn main() {}

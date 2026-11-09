@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+creusot-std = { path = "/home/landon/creusot/creusot-std", optional = true }
 bitvec = "1.0.1"
 evalexpr = "13.0.0"
 itertools = "0.14.0"
@@ -23,4 +24,7 @@ name = "cardio"
 crate-type = ["cdylib"]
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(creusot)'] }
+
+[features]
+creusot = ["creusot-std"]

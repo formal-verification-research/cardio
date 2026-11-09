@@ -91,9 +91,10 @@ Run with:
 
 ## Other provers considered
 
-- **Creusot**: requires a custom Rust toolchain and Why3 (OCaml). The repository is checked out under
-  `~/.cargo/git/checkouts/creusot-*` but Why3 is not installed. To enable, install Why3 and build
-  `cargo-creusot` from that checkout, then annotate code with `#[requires]`/`#[ensures]`.
+- **Creusot**: now available. Why3 is installed (opam) and `cargo-creusot` works with the
+  `nightly-2026-08-03` toolchain. Cardio exposes an optional `creusot` feature and a
+  `creusot-std` dependency for future contract annotations. A standalone example lives under
+  `verification/creusot` (to be added) once the crate is decoupled from the parent workspace.
 - **Prusti**: requires Viper/Java and a specific Rust version; not installed.
 - **MIRAI/Flux**: not available in this environment.
 

@@ -517,7 +517,36 @@ impl SprsMatBuilder for ExplicitSprsMatBuilder {
 	}
 
 	fn to_emb_dtmc(&mut self) -> (f64, sprs::CsMat<f64>) {
-		unimplemented!();
+		let state_count = self.rows().max(self.cols());
+		let mut row_sums = vec![0.0f64; state_count];
+		let mut entries: Vec<std::collections::BTreeMap<usize, f64>> =
+			vec![std::collections::BTreeMap::new(); state_count];
+		for i in 0..self.data().len() {
+			let row = self.row_inds()[i];
+			let col = self.col_inds()[i];
+			let val = self.data()[i];
+			if row < state_count && col < state_count {
+				*entries[row].entry(col).or_insert(0.0) += val;
+				row_sums[row] += val;
+			}
+		}
+		let mut epoch = 0.0f64;
+		for row in 0..state_count {
+			if row == 0 || epoch > row_sums[row] {
+				epoch = row_sums[row];
+			}
+		}
+		if epoch == 0.0 {
+			epoch = 1.0;
+		}
+		let mut m = sprs::TriMat::new((state_count, state_count));
+		for row in 0..state_count {
+			for (col, value) in &entries[row] {
+				m.add_triplet(row, *col, *value);
+			}
+			m.add_triplet(row, row, row_sums[row]);
+		}
+		(epoch, m.to_csc())
 	}
 
 	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
@@ -649,6 +678,23 @@ mod matrix_tests {
 #[cfg(test)]
 mod unif_matrix_tests {
 	use super::*;
+
+	#[test]
+	fn trimat_rows_sum_to_one() {
+		let mut tm = sprs::TriMat::new((3, 3));
+		tm.add_triplet(0, 1, 2.0);
+		tm.add_triplet(1, 2, 3.0);
+		tm.add_triplet(2, 0, 1.5);
+		let (epoch, m) = tm.to_unif_matrix();
+		assert!(epoch > 0.0);
+		for row in 0..m.rows() {
+			let mut sum = 0.0;
+			for col in 0..m.cols() {
+				sum += m.get(row, col).copied().unwrap_or(0.0);
+			}
+			assert!((sum - 1.0).abs() < 1e-9, "row {} sum {}", row, sum);
+		}
+	}
 
 	#[test]
 	fn rows_sum_to_one() {
