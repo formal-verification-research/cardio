@@ -66,6 +66,8 @@ python tests/toy.py --bypass_cardio # Storm only
 python tests/toy.py --bypass_storm  # Cardio only
 ```
 
+See `docs/TESTS.md` for the full test inventory and expected results.
+
 ## Formal verification (optional)
 
 Verification tooling is **not** required to build or run Cardio.
@@ -88,7 +90,7 @@ Creusot (requires `nightly-2026-08-03` + Why3):
 RUSTUP_TOOLCHAIN=nightly-2026-08-03 cargo-creusot
 ```
 
-See `VERIFICATION.md` for the full verification inventory and remaining work.
+See `docs/VERIFICATION.md` for the full verification inventory and remaining work.
 
 ## API overview
 
@@ -105,7 +107,7 @@ See `VERIFICATION.md` for the full verification inventory and remaining work.
 - State index `0` is absorbing; state index `1` is initial.
 - CTMCs are uniformized; Fox-Glynn weights drive bounded-time computation.
 - Rust formatting follows `rustfmt.toml` (tabs, Unix newlines).
-- Production-readiness gaps are tracked in `AUDIT.md`.
+- Production-readiness gaps are tracked in `docs/AUDIT.md`.
 
 ## Troubleshooting
 
