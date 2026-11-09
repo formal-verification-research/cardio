@@ -40,7 +40,6 @@ pub mod property;
 pub mod python;
 pub mod rewards;
 
-
 #[cfg(kani)]
 mod kani_simple {
 	#[kani::proof]

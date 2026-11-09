@@ -52,29 +52,30 @@ pub fn uniformize_ma(
 	unif_rate: f64,
 	deadlock: &BitVec,
 ) {
-	let mut row: usize = 0;
-	for deadlock_index in deadlock.iter_ones() {
+	// `deadlock` marks the states (rows) that are deadlocks in the Markov automaton
+	// and therefore need to be uniformized. Each such row is scaled so that its exit
+	// rate matches `unif_rate`.
+	for deadlock_state in deadlock.iter_ones() {
+		let row = deadlock_state;
 		let old_rate = rates[row];
 		if old_rate == unif_rate {
-			// We don't need to uniformize this row
-			row += 1;
+			// We don't need to uniformize this row.
 			continue;
 		}
-		// We're in csc so we can just iterate over the outer dimension, and that will
-		// represent the columns.
+		// The matrix is stored in CSC form, so the outer dimension represents
+		// destination columns. We adjust the entry in each column that corresponds
+		// to the source row `row`.
 		for (col_idx, mut col) in matrix.outer_iterator_mut().enumerate() {
 			let val = col[row];
-			col[row] = if col_idx == deadlock_index {
-				// Compute the new self loop index
+			col[row] = if col_idx == row {
+				// Compute the new self-loop probability.
 				let sloop = unif_rate - old_rate + val * old_rate;
 				sloop / unif_rate
 			} else {
 				val * old_rate / unif_rate
-			}
+			};
 		}
-		row += 1;
 	}
-	assert!(row == matrix.rows());
 	for step in steps.iter_mut() {
 		let index = step.0;
 		step.1 *= rates[index] / unif_rate;
@@ -359,6 +360,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 
 	/// I attempted to optimize this function by pre-allocating the size for each triplet vector
 	fn to_sparse_matrix(&mut self) -> sprs::CsMat<f64> {
+		self.apply_queued_size();
 		let state_count = self.state_count.max(self.data.len());
 		let mut rows = Vec::<usize>::with_capacity(self.len());
 		let mut cols = Vec::<usize>::with_capacity(self.len());
@@ -376,7 +378,8 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 	}
 
 	fn to_emb_dtmc(&mut self) -> (f64, sprs::CsMat<f64>) {
-		let state_count = self.len();
+		self.apply_queued_size();
+		let state_count = self.state_count.max(self.data.len());
 		let row_cnt = self.data.len();
 		let mut rows = Vec::<usize>::with_capacity(state_count + row_cnt);
 		let mut cols = Vec::<usize>::with_capacity(state_count + row_cnt);
@@ -606,7 +609,6 @@ mod matrix_tests {
 	}
 }
 
-
 #[cfg(test)]
 mod unif_matrix_tests {
 	use super::*;
@@ -617,6 +619,40 @@ mod unif_matrix_tests {
 		mb.insert(1, 0, 1.0);
 		let (epoch, m) = mb.to_unif_matrix();
 		assert!((epoch - 1.0).abs() < 1e-12);
+		for row in 0..m.rows() {
+			let mut sum = 0.0;
+			for col in 0..m.cols() {
+				sum += m.get(row, col).copied().unwrap_or(0.0);
+			}
+			assert!((sum - 1.0).abs() < 1e-9, "row {} sum {}", row, sum);
+		}
+	}
+
+	#[test]
+	fn random_ctmc_rows_sum_to_one() {
+		// Deterministic pseudo-random CTMC over 6 states.
+		let mut seed: u64 = 987654321;
+		let n = 6usize;
+		let mut mb = OptimalSprsMatBuilder::new();
+		for src in 1..n {
+			// ensure each non-absorbing state has at least one transition
+			let mut exit_rate = 0.0;
+			for dst in 0..n {
+				seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+				let r = (seed >> 32) as usize % 4;
+				if r == 0 {
+					continue;
+				}
+				let rate = (r as f64) * 0.5 + 0.1;
+				mb.insert(src, dst, rate);
+				exit_rate += rate;
+			}
+			if exit_rate == 0.0 {
+				mb.insert(src, 0, 1.0);
+			}
+		}
+		// absorbing state 0 gets a self loop via uniformization (no inserts).
+		let (_epoch, m) = mb.to_unif_matrix();
 		for row in 0..m.rows() {
 			let mut sum = 0.0;
 			for col in 0..m.cols() {

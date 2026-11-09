@@ -52,8 +52,12 @@ mod cardio {
 			// `phi` is `true` for every state, which is represented by an empty label
 			// bitmask (no label requirements).
 			let phi_mask = self.labelling.create_label_bitmask(vec![]);
-			let psi_sat = self.labelling.create_label_bitmask(vec!["satisfying".to_string()]);
-			let psi_abs = self.labelling.create_label_bitmask(vec!["absorbing".to_string()]);
+			let psi_sat = self
+				.labelling
+				.create_label_bitmask(vec!["satisfying".to_string()]);
+			let psi_abs = self
+				.labelling
+				.create_label_bitmask(vec!["absorbing".to_string()]);
 
 			// Relevant states are those that satisfy phi (here, all states).
 			let relevant_states = self.labelling.create_relevant(&phi_mask, state_count);
@@ -90,12 +94,8 @@ mod cardio {
 				deadlock_idxes,
 				exit_rates,
 			);
-			let dist_abs = csl_checker.compute_until(
-				&mut check_context,
-				interval,
-				phi_mask,
-				psi_abs,
-			);
+			let dist_abs =
+				csl_checker.compute_until(&mut check_context, interval, phi_mask, psi_abs);
 			let absorption_prob = dist_abs.get(1).copied().unwrap_or(0.0);
 			let upper_bound = lower_bound + absorption_prob;
 

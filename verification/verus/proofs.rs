@@ -1,5 +1,5 @@
 // Verus proofs for selected Cardio helper logic.
-// Run with: ~/Downloads/verus/verus verification/verus/proofs.rs
+// Run with: /home/landon/Downloads/verus/verus verification/verus/proofs.rs
 
 use vstd::prelude::*;
 
@@ -24,6 +24,16 @@ fn checked_add_spec(a: i64, b: i64) -> (r: Option<i64>)
         },
 {
     a.checked_add(b)
+}
+
+fn checked_mul_spec(a: i64, b: i64) -> (r: Option<i64>)
+    ensures
+        match r {
+            Some(s) => s as int == a as int * b as int,
+            None => true,
+        },
+{
+    a.checked_mul(b)
 }
 }
 

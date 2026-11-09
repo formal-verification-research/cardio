@@ -462,11 +462,46 @@ mod kani_proofs {
 		let r = expr.evaluate_value();
 		assert!(r == Some(a - b));
 	}
+
+	#[kani::proof]
+	#[kani::unwind(4)]
+	fn evaluate_value_plus_no_panic() {
+		let a: i64 = kani::any();
+		let b: i64 = kani::any();
+		kani::assume(a > -1000 && a < 1000);
+		kani::assume(b > -1000 && b < 1000);
+		let expr = AtomicExpression::BinaryOperator(
+			BinaryApOperator::Plus,
+			Box::new(AtomicExpression::Value(a)),
+			Box::new(AtomicExpression::Value(b)),
+		);
+		let r = expr.evaluate_value();
+		assert!(r == Some(a + b));
+	}
+
+	#[kani::proof]
+	#[kani::unwind(4)]
+	fn evaluate_value_multiply_no_panic() {
+		let a: i64 = kani::any();
+		let b: i64 = kani::any();
+		kani::assume(a > -32 && a < 32);
+		kani::assume(b > -32 && b < 32);
+		let expr = AtomicExpression::BinaryOperator(
+			BinaryApOperator::Multipy,
+			Box::new(AtomicExpression::Value(a)),
+			Box::new(AtomicExpression::Value(b)),
+		);
+		let r = expr.evaluate_value();
+		assert!(r == Some(a * b));
+	}
 }
 
 #[cfg(test)]
 mod property_tests {
-	use super::{AtomicExpression, BinaryApOperator, Interval, PathFormula, ProbabilityQueryType, Property, StateFormula};
+	use super::{
+		AtomicExpression, BinaryApOperator, Interval, PathFormula, ProbabilityQueryType, Property,
+		StateFormula,
+	};
 
 	#[test]
 	fn construction_test() {

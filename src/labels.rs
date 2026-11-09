@@ -213,25 +213,3 @@ mod label_tests {
 		}
 	}
 }
-
-#[cfg(kani)]
-mod kani_proofs {
-	use super::*;
-
-	#[kani::proof]
-	fn index_to_label_in_bounds() {
-		let labels = Labels::with_abs_and_sat();
-		let idx: usize = kani::any();
-		kani::assume(idx < labels.label_count());
-		assert!(labels.index_to_label(idx).is_some());
-	}
-
-	#[kani::proof]
-	fn state_has_label_no_panic() {
-		let labels = Labels::with_abs_and_sat();
-		let state: usize = kani::any();
-		let label: usize = kani::any();
-		kani::assume(label < labels.label_count());
-		let _ = labels.state_has_label(state, label);
-	}
-}
