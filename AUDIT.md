@@ -8,12 +8,14 @@ toy model. Several areas need work before production use.
 ## Findings
 
 ### Correctness
-- Uniformization row sums verified (Rust tests).
+- [Resolved] Uniformization row sums verified (Rust tests).
+- [Resolved] Python bindings now return `PyResult` with input validation.
 - Fox-Glynn PMF validated against SciPy (Python tests).
 - Toy model bounds agree with Storm.
 - `CheckContext` uses `RwLock` and many `.unwrap()` calls; poisoning would panic.
 
 ### Performance
+- [Improved] Dense accumulator in `compute_transient` reduces conversions.
 - Matrix-vector products in `compute_transient` are O(nnz) but repeated per Poisson term; for 9k-state models Cardio is ~60x slower than Storm. Consider caching, sparse BLAS, or blocked iteration.
 - `steady_state` recomputes row sums O(n*nnz) per iteration.
 

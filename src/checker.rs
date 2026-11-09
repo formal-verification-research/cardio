@@ -316,41 +316,33 @@ impl CslChecker {
 		}
 
 		// Accumulate Poisson-weighted contributions for k = left..=right.
-		let mut result = CsVec::empty(dim);
+		// Use a single dense accumulator to avoid repeated sparse conversions.
+		let mut acc = vec![0.0f64; dim];
 		for k in 0..=(fg_result.right - fg_result.left) {
 			let weight = fg_result.weights[k];
-			let scaled = v.map(|elem| *elem * weight);
-			// Add scaled into result.
-			// CsVec does not implement AddAssign for scaled vectors directly in all
-			// versions, so accumulate via a dense temporary.
-			let mut tmp = vec![0.0f64; dim];
-			for (idx, &val) in result.iter() {
+			for (idx, &val) in v.iter() {
 				if idx < dim {
-					tmp[idx] += val;
+					acc[idx] += val * weight;
 				}
 			}
-			for (idx, &val) in scaled.iter() {
-				if idx < dim {
-					tmp[idx] += val;
-				}
-			}
-			let mut idxs = Vec::new();
-			let mut vals = Vec::new();
-			for (i, &x) in tmp.iter().enumerate() {
-				if x != 0.0 {
-					idxs.push(i);
-					vals.push(x);
-				}
-			}
-			result = CsVec::new(dim, idxs, vals);
 
 			// Advance for the next k.
 			v = &matrix * &v + &add_vec;
 		}
 
 		// Normalize by the total (truncated) Poisson weight.
-		result.map_inplace(|val| *val / fg_result.total_weight);
-		result
+		for x in &mut acc {
+			*x /= fg_result.total_weight;
+		}
+		let mut idxs = Vec::new();
+		let mut vals = Vec::new();
+		for (i, &x) in acc.iter().enumerate() {
+			if x != 0.0 {
+				idxs.push(i);
+				vals.push(x);
+			}
+		}
+		CsVec::new(dim, idxs, vals)
 	}
 
 	pub fn steady_state(&self, context: &mut CheckContext) -> CsVec<f64> {

@@ -47,8 +47,11 @@ mod cardio {
 		}
 
 		/// Build the uniformized matrix and return (lower_bound, upper_bound) reachability.
-		pub fn build_matrix_and_get_bounds(&mut self, time_bound: f64) -> (f64, f64) {
+		pub fn build_matrix_and_get_bounds(&mut self, time_bound: f64) -> pyo3::PyResult<(f64, f64)> {
 			let _ = env_logger::try_init();
+			if time_bound <= 0.0 {
+				return Err(pyo3::exceptions::PyValueError::new_err("time_bound must be positive"));
+			}
 			debug!("Satisfying state count: {}", self.satisfying_state_count);
 			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
 			let state_count = model_context.state_count();
@@ -105,7 +108,7 @@ mod cardio {
 			let absorption_prob = dist_abs.get(1).copied().unwrap_or(0.0);
 			let upper_bound = lower_bound + absorption_prob;
 
-			(lower_bound, upper_bound)
+			Ok((lower_bound, upper_bound))
 		}
 	}
 
