@@ -1,6 +1,5 @@
 use std::ops;
 
-use crate::matrix::CheckableNumber;
 use crate::parser::{lex, parse_path_formula, parse_state_formula};
 
 /// A trait for anything we can throw in a .props, .csl, or .pctl file.
@@ -26,6 +25,7 @@ pub enum ComparisonOperator {
 	LessEq,
 	Greater,
 	Less,
+	NotEqual,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -55,7 +55,7 @@ impl AtomicExpression {
 				let rhs_val = rhs.evaluate_value()?;
 				let res = match op {
 					BinaryApOperator::Plus => lhs_val + rhs_val,
-					BinaryApOperator::Minus => lhs_val + rhs_val,
+					BinaryApOperator::Minus => lhs_val - rhs_val,
 					BinaryApOperator::Multipy => lhs_val * rhs_val,
 				};
 				Some(res)
@@ -79,9 +79,20 @@ impl AtomicExpression {
 		match self {
 			// If a variable or a value, we can't simplify
 			Self::Value(_) | Self::Variable(_) => self.clone(),
-			// Here we can try to simplify it
+			// Constant-fold when both operands are known values.
 			Self::BinaryOperator(op, lhs, rhs) => {
-				unimplemented!()
+				let l = lhs.simplify();
+				let r = rhs.simplify();
+				if let (Some(lv), Some(rv)) = (l.evaluate_value(), r.evaluate_value()) {
+					let res = match op {
+						BinaryApOperator::Plus => lv + rv,
+						BinaryApOperator::Minus => lv - rv,
+						BinaryApOperator::Multipy => lv * rv,
+					};
+					Self::Value(res)
+				} else {
+					Self::BinaryOperator(*op, Box::new(l), Box::new(r))
+				}
 			}
 		}
 	}
@@ -115,6 +126,166 @@ pub struct AtomicProposition {
 	rhs: Box<AtomicExpression>,
 }
 
+
+/// Parse a simple arithmetic atomic expression.
+fn parse_atomic_expression(input: &str) -> Result<AtomicExpression, String> {
+	let mut p = AtomicExprParser::new(input);
+	let expr = p.parse_expr()?;
+	p.skip_ws();
+	if p.pos != p.chars.len() {
+		return Err(format!("Unexpected trailing input: {}", &input[p.pos..]));
+	}
+	Ok(expr)
+}
+
+struct AtomicExprParser {
+	chars: Vec<char>,
+	pos: usize,
+}
+
+impl AtomicExprParser {
+	fn new(input: &str) -> Self {
+		Self {
+			chars: input.chars().collect(),
+			pos: 0,
+		}
+	}
+
+	fn skip_ws(&mut self) {
+		while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
+			self.pos += 1;
+		}
+	}
+
+	fn parse_expr(&mut self) -> Result<AtomicExpression, String> {
+		self.parse_add_sub()
+	}
+
+	fn parse_add_sub(&mut self) -> Result<AtomicExpression, String> {
+		let mut left = self.parse_mul()?;
+		loop {
+			self.skip_ws();
+			if self.pos < self.chars.len() && (self.chars[self.pos] == '+' || self.chars[self.pos] == '-') {
+				let op = if self.chars[self.pos] == '+' {
+					BinaryApOperator::Plus
+				} else {
+					BinaryApOperator::Minus
+				};
+				self.pos += 1;
+				let right = self.parse_mul()?;
+				left = AtomicExpression::BinaryOperator(op, Box::new(left), Box::new(right));
+			} else {
+				break;
+			}
+		}
+		Ok(left)
+	}
+
+	fn parse_mul(&mut self) -> Result<AtomicExpression, String> {
+		let mut left = self.parse_primary()?;
+		loop {
+			self.skip_ws();
+			if self.pos < self.chars.len() && self.chars[self.pos] == '*' {
+				self.pos += 1;
+				let right = self.parse_primary()?;
+				left = AtomicExpression::BinaryOperator(
+					BinaryApOperator::Multipy,
+					Box::new(left),
+					Box::new(right),
+				);
+			} else {
+				break;
+			}
+		}
+		Ok(left)
+	}
+
+	fn parse_primary(&mut self) -> Result<AtomicExpression, String> {
+		self.skip_ws();
+		if self.pos >= self.chars.len() {
+			return Err("Unexpected end of expression".to_string());
+		}
+		if self.chars[self.pos] == '(' {
+			self.pos += 1;
+			let expr = self.parse_expr()?;
+			self.skip_ws();
+			if self.pos >= self.chars.len() || self.chars[self.pos] != ')' {
+				return Err("Expected ')'".to_string());
+			}
+			self.pos += 1;
+			return Ok(expr);
+		}
+		if self.chars[self.pos] == '-' {
+			self.pos += 1;
+			let inner = self.parse_primary()?;
+			// Represent unary minus as 0 - expr.
+			return Ok(AtomicExpression::BinaryOperator(
+				BinaryApOperator::Minus,
+				Box::new(AtomicExpression::Value(0)),
+				Box::new(inner),
+			));
+		}
+		if self.chars[self.pos].is_ascii_digit() {
+			let start = self.pos;
+			while self.pos < self.chars.len() && self.chars[self.pos].is_ascii_digit() {
+				self.pos += 1;
+			}
+			let num_str: String = self.chars[start..self.pos].iter().collect();
+			let val: i64 = num_str
+				.parse()
+				.map_err(|_| "Invalid integer".to_string())?;
+			return Ok(AtomicExpression::Value(val));
+		}
+		if self.chars[self.pos].is_alphabetic() || self.chars[self.pos] == '_' {
+			let start = self.pos;
+			while self.pos < self.chars.len()
+				&& (self.chars[self.pos].is_alphanumeric() || self.chars[self.pos] == '_')
+			{
+				self.pos += 1;
+			}
+			let name: String = self.chars[start..self.pos].iter().collect();
+			self.skip_ws();
+			if self.pos < self.chars.len() && self.chars[self.pos] == '[' {
+				// Bit index range bv[lower, upper]
+				self.pos += 1;
+				self.skip_ws();
+				let lower = self.parse_integer()?;
+				self.skip_ws();
+				if self.pos >= self.chars.len() || self.chars[self.pos] != ',' {
+					return Err("Expected ',' in bit index range".to_string());
+				}
+				self.pos += 1;
+				self.skip_ws();
+				let upper = self.parse_integer()?;
+				self.skip_ws();
+				if self.pos >= self.chars.len() || self.chars[self.pos] != ']' {
+					return Err("Expected ']' in bit index range".to_string());
+				}
+				self.pos += 1;
+				return Ok(AtomicExpression::Variable(VariableType::BitIndecies(
+					lower, upper,
+				)));
+			}
+			return Ok(AtomicExpression::Variable(VariableType::Name(name)));
+		}
+		Err(format!("Unexpected character: {}", self.chars[self.pos]))
+	}
+
+	fn parse_integer(&mut self) -> Result<usize, String> {
+		self.skip_ws();
+		let start = self.pos;
+		while self.pos < self.chars.len() && self.chars[self.pos].is_ascii_digit() {
+			self.pos += 1;
+		}
+		if start == self.pos {
+			return Err("Expected integer".to_string());
+		}
+		let s: String = self.chars[start..self.pos].iter().collect();
+		let v: usize = s.parse().map_err(|_| "Invalid integer".to_string())?;
+		Ok(v)
+	}
+}
+
 impl Property for AtomicProposition {
 	fn is_pctl(&self) -> bool {
 		// All atomic propositions on states can be checked in CSL
@@ -125,23 +296,92 @@ impl Property for AtomicProposition {
 	where
 		Self: Sized,
 	{
-		let tokens = lex(input);
-		unimplemented!();
+		// Trim and locate the top-level comparison operator.
+		let s = input.trim();
+		if s.is_empty() {
+			return Err("Empty atomic proposition".to_string());
+		}
+		let mut depth = 0usize;
+		let mut op_pos: Option<usize> = None;
+		let mut op_len = 0usize;
+		let mut operator = ComparisonOperator::Eq;
+		let bytes = s.as_bytes();
+		let mut i = 0usize;
+		while i < s.len() {
+			let c = bytes[i] as char;
+			match c {
+				'(' => depth += 1,
+				')' => {
+					if depth == 0 {
+						return Err("Unbalanced parentheses".to_string());
+					}
+					depth -= 1;
+				}
+				'<' | '>' | '=' | '!' if depth == 0 => {
+					// Try two-character operators first.
+					let two = if i + 1 < s.len() {
+						&s[i..i + 2]
+					} else {
+						""
+					};
+					let (len, op) = if two == "<=" {
+						(2, ComparisonOperator::LessEq)
+					} else if two == ">=" {
+						(2, ComparisonOperator::GreaterEq)
+					} else if two == "==" {
+						(2, ComparisonOperator::Eq)
+					} else if two == "!=" {
+						(2, ComparisonOperator::NotEqual)
+					} else {
+						match c {
+							'<' => (1, ComparisonOperator::Less),
+							'>' => (1, ComparisonOperator::Greater),
+							'=' => (1, ComparisonOperator::Eq),
+							'!' => return Err("Unexpected '!' in atomic proposition".to_string()),
+							_ => (0, ComparisonOperator::Eq),
+						}
+					};
+					if len > 0 && op_pos.is_none() {
+						op_pos = Some(i);
+						op_len = len;
+						operator = op;
+					}
+				}
+				_ => {}
+			}
+			i += c.len_utf8();
+		}
+		if depth != 0 {
+			return Err("Unbalanced parentheses".to_string());
+		}
+		let pos = match op_pos {
+			Some(p) => p,
+			None => return Err("Missing comparison operator in atomic proposition".to_string()),
+		};
+		let lhs_str = s[..pos].trim();
+		let rhs_str = s[pos + op_len..].trim();
+		if lhs_str.is_empty() || rhs_str.is_empty() {
+			return Err("Missing operand in atomic proposition".to_string());
+		}
+		let lhs = parse_atomic_expression(lhs_str)?;
+		let rhs = parse_atomic_expression(rhs_str)?;
+		Ok(Self {
+			lhs: Box::new(lhs),
+			operator,
+			rhs: Box::new(rhs),
+		})
 	}
 }
 
 /// An enum representing the possible time bounds that a CSL property can handle
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Interval<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Interval {
 	/// A time bound of the form [0, T]
-	TimeBoundedUpper(ValueType),
+	TimeBoundedUpper(f64),
 	/// A time bound of the form [T, T']
-	TimeBoundWindow(ValueType, ValueType),
+	TimeBoundWindow(f64, f64),
 	/// A time bound of the form [T, oo] (T to infinity)
-	TimeBoundedLower(ValueType),
+	TimeBoundedLower(f64),
 	/// A bound in the number of steps. Because PCTL only supports an upper bound on the number of
 	/// steps, the count in here is an upper bound, i.e., from [0, k] steps.
 	StepBoundUpper(usize),
@@ -149,10 +389,7 @@ where
 	TimeUnbounded,
 }
 
-impl<ValueType> ToString for Interval<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ToString for Interval {
 	fn to_string(&self) -> String {
 		match self {
 			Self::TimeUnbounded => "".to_string(),
@@ -165,27 +402,21 @@ where
 }
 
 /// The type of transient or steady state probability query.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ProbabilityQueryType<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ProbabilityQueryType {
 	/// A simple query that asks the probability
 	SimpleQuery,
 	/// A query that asks "is the probability less than p?"
-	LessThan(ValueType),
+	LessThan(f64),
 	/// A query that asks "is the probability less than or equal to p?"
-	LessThanEqual(ValueType),
+	LessThanEqual(f64),
 	/// A query that asks "is the probability greater than p?"
-	GreaterThan(ValueType),
+	GreaterThan(f64),
 	/// A query that asks "is the probability greater than or equal to p?"
-	GreaterThanEqual(ValueType),
+	GreaterThanEqual(f64),
 }
 
-impl<ValueType> ToString for ProbabilityQueryType<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ToString for ProbabilityQueryType {
 	fn to_string(&self) -> String {
 		match self {
 			Self::SimpleQuery => "=?".to_string(),
@@ -200,10 +431,7 @@ where
 /// A CSL or PCTL state formula. PCTL excludes the `SteadyStateQuery` however, and tools should
 /// panic or error if receiving a steady-state query.
 #[derive(Clone, Debug, PartialEq)]
-pub enum StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+pub enum StateFormula {
 	/// Evaluates to `true` on all states
 	True,
 	/// Evaluates to `false` on all states
@@ -213,26 +441,20 @@ where
 	/// A string label for a particular state, i.e., "Absorbing"
 	StringLabel(String),
 	/// The negation operator on another state formula
-	Not(Box<StateFormula<ValueType>>),
+	Not(Box<StateFormula>),
 	/// The conjunction of two state formulae
-	Conjunction(Box<StateFormula<ValueType>>, Box<StateFormula<ValueType>>),
+	Conjunction(Box<StateFormula>, Box<StateFormula>),
 	/// The Disjunction of two state formulae
-	Disjunction(Box<StateFormula<ValueType>>, Box<StateFormula<ValueType>>),
+	Disjunction(Box<StateFormula>, Box<StateFormula>),
 	/// A probability query on a path formula. I.e., "from this state, what is the probability that
 	/// the next path formula holds?"
-	TransientQuery(ProbabilityQueryType<ValueType>, Box<PathFormula<ValueType>>),
+	TransientQuery(ProbabilityQueryType, Box<PathFormula>),
 	/// A steady state formula. I.e., "from this state, what is the probability that in the steady
 	/// state Phi holds?"
-	SteadyStateQuery(
-		ProbabilityQueryType<ValueType>,
-		Box<StateFormula<ValueType>>,
-	),
+	SteadyStateQuery(ProbabilityQueryType, Box<StateFormula>),
 }
 
-impl<ValueType> ops::Not for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ops::Not for StateFormula {
 	type Output = Self;
 
 	fn not(self) -> Self::Output {
@@ -247,30 +469,21 @@ where
 	}
 }
 
-impl<ValueType> ops::BitAnd for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ops::BitAnd for StateFormula {
 	type Output = Self;
 	fn bitand(self, rhs: Self) -> Self::Output {
 		Self::Conjunction(Box::new(self.clone()), Box::new(rhs.clone()))
 	}
 }
 
-impl<ValueType> ops::BitOr for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ops::BitOr for StateFormula {
 	type Output = Self;
 	fn bitor(self, rhs: Self) -> Self::Output {
 		Self::Disjunction(Box::new(self.clone()), Box::new(rhs.clone()))
 	}
 }
 
-impl<ValueType> ToString for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ToString for StateFormula {
 	fn to_string(&self) -> String {
 		match self {
 			Self::True => "true".to_string(),
@@ -302,10 +515,7 @@ where
 	}
 }
 
-impl<ValueType> Property for StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl Property for StateFormula {
 	fn is_pctl(&self) -> bool {
 		match self {
 			Self::True | Self::False | Self::StringLabel(_) | Self::AtomicProposition(_) => true,
@@ -324,10 +534,7 @@ where
 	}
 }
 
-impl<ValueType> StateFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl StateFormula {
 	/// Creates lower and upper bound properties, useful for STAMINA.
 	pub fn create_bounds(&self) -> Option<(Self, Self)> {
 		let abs = Self::absorbing();
@@ -354,10 +561,7 @@ where
 					PathFormula::Next(phi) => {
 						let phi_lower = *phi.clone() & !abs.clone();
 						let phi_upper = *phi.clone() | abs.clone();
-						(
-							PathFormula::<ValueType>::next(&phi_lower),
-							PathFormula::<ValueType>::next(&phi_upper),
-						)
+						(PathFormula::next(&phi_lower), PathFormula::next(&phi_upper))
 					}
 					PathFormula::Until(phi, interval, psi) => {
 						// For phi, the upper bound can just be the same, but the lower bound we
@@ -369,8 +573,8 @@ where
 						let psi_lower = *psi.clone() & !abs.clone();
 						let psi_upper = *psi.clone() | abs.clone();
 						(
-							PathFormula::<ValueType>::until(&phi_lower, *interval, &psi_lower),
-							PathFormula::<ValueType>::until(&phi_upper, *interval, &psi_upper),
+							PathFormula::until(&phi_lower, *interval, &psi_lower),
+							PathFormula::until(&phi_upper, *interval, &psi_upper),
 						)
 					}
 					PathFormula::Globally(phi) => {
@@ -378,8 +582,8 @@ where
 						let phi_lower = *phi.clone() & !abs.clone();
 						let phi_upper = *phi.clone() | abs.clone();
 						(
-							PathFormula::<ValueType>::globally(&phi_lower),
-							PathFormula::<ValueType>::globally(&phi_upper),
+							PathFormula::globally(&phi_lower),
+							PathFormula::globally(&phi_upper),
 						)
 					}
 				};
@@ -409,26 +613,16 @@ where
 /// A CSL or PCTL path formula. In PCTL the interval type must be restricted to upper bounded
 /// intervals with integer bounds.
 #[derive(Clone, Debug, PartialEq)]
-pub enum PathFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+pub enum PathFormula {
 	/// If the state formula holds in the next state.
-	Next(Box<StateFormula<ValueType>>),
+	Next(Box<StateFormula>),
 	/// An "until" path formula over an interval
-	Until(
-		Box<StateFormula<ValueType>>,
-		Interval<ValueType>,
-		Box<StateFormula<ValueType>>,
-	),
+	Until(Box<StateFormula>, Interval, Box<StateFormula>),
 	/// A state formula holds on an entire path. This is equivalent to Phi U False
-	Globally(Box<StateFormula<ValueType>>),
+	Globally(Box<StateFormula>),
 }
 
-impl<ValueType> Property for PathFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl Property for PathFormula {
 	fn is_pctl(&self) -> bool {
 		match self {
 			Self::Next(sf) | Self::Globally(sf) => sf.is_pctl(),
@@ -445,10 +639,7 @@ where
 	}
 }
 
-impl<ValueType> ToString for PathFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl ToString for PathFormula {
 	fn to_string(&self) -> String {
 		match self {
 			Self::Next(sf) => {
@@ -469,35 +660,25 @@ where
 	}
 }
 
-impl<ValueType> PathFormula<ValueType>
-where
-	ValueType: CheckableNumber,
-{
+impl PathFormula {
 	/// Creates a state formula of type `next`
-	pub fn next(state_formula: &StateFormula<ValueType>) -> Self {
+	pub fn next(state_formula: &StateFormula) -> Self {
 		Self::Next(Box::new(state_formula.clone()))
 	}
 
 	/// Creates a state formula of type `until`
-	pub fn until(
-		phi: &StateFormula<ValueType>,
-		interval: Interval<ValueType>,
-		psi: &StateFormula<ValueType>,
-	) -> Self {
+	pub fn until(phi: &StateFormula, interval: Interval, psi: &StateFormula) -> Self {
 		Self::Until(Box::new(phi.clone()), interval, Box::new(psi.clone()))
 	}
 
-	pub fn globally(state_formula: &StateFormula<ValueType>) -> Self {
+	pub fn globally(state_formula: &StateFormula) -> Self {
 		Self::Globally(Box::new(state_formula.clone()))
 	}
 
 	/// Creates an "eventually" state formula, which is equivalently "true U psi"
-	pub fn eventually(
-		interval: Interval<ValueType>,
-		state_formula: &StateFormula<ValueType>,
-	) -> Self {
+	pub fn eventually(interval: Interval, state_formula: &StateFormula) -> Self {
 		Self::Until(
-			Box::new(StateFormula::<ValueType>::True),
+			Box::new(StateFormula::True),
 			interval,
 			Box::new(state_formula.clone()),
 		)
@@ -506,18 +687,73 @@ where
 	// TODO: Weak until and release.
 }
 
+#[cfg(kani)]
+mod kani_proofs {
+	use super::*;
+
+	#[kani::proof]
+	#[kani::unwind(4)]
+	fn evaluate_value_minus_no_panic() {
+		let a: i64 = kani::any();
+		let b: i64 = kani::any();
+		kani::assume(a > -1000 && a < 1000);
+		kani::assume(b > -1000 && b < 1000);
+		let expr = AtomicExpression::BinaryOperator(
+			BinaryApOperator::Minus,
+			Box::new(AtomicExpression::Value(a)),
+			Box::new(AtomicExpression::Value(b)),
+		);
+		let r = expr.evaluate_value();
+		assert!(r == Some(a - b));
+	}
+
+	#[kani::proof]
+	#[kani::unwind(4)]
+	fn evaluate_value_plus_no_panic() {
+		let a: i64 = kani::any();
+		let b: i64 = kani::any();
+		kani::assume(a > -1000 && a < 1000);
+		kani::assume(b > -1000 && b < 1000);
+		let expr = AtomicExpression::BinaryOperator(
+			BinaryApOperator::Plus,
+			Box::new(AtomicExpression::Value(a)),
+			Box::new(AtomicExpression::Value(b)),
+		);
+		let r = expr.evaluate_value();
+		assert!(r == Some(a + b));
+	}
+
+	#[kani::proof]
+	#[kani::unwind(4)]
+	fn evaluate_value_multiply_no_panic() {
+		let a: i64 = kani::any();
+		let b: i64 = kani::any();
+		kani::assume(a > -32 && a < 32);
+		kani::assume(b > -32 && b < 32);
+		let expr = AtomicExpression::BinaryOperator(
+			BinaryApOperator::Multipy,
+			Box::new(AtomicExpression::Value(a)),
+			Box::new(AtomicExpression::Value(b)),
+		);
+		let r = expr.evaluate_value();
+		assert!(r == Some(a * b));
+	}
+}
+
 #[cfg(test)]
 mod property_tests {
-	use super::{Interval, PathFormula, ProbabilityQueryType, Property, StateFormula};
+	use super::{
+		AtomicExpression, AtomicProposition, BinaryApOperator, ComparisonOperator, Interval, PathFormula,
+		ProbabilityQueryType, Property, StateFormula, VariableType,
+	};
 
 	#[test]
 	fn construction_test() {
-		let phi: StateFormula<f64> = StateFormula::absorbing();
+		let phi: StateFormula = StateFormula::absorbing();
 		let neg_phi = !phi.clone();
-		let eventually_abs: PathFormula<f64> =
-			PathFormula::eventually(Interval::<_>::TimeUnbounded, &phi);
-		let globally_not_abs: PathFormula<f64> = PathFormula::globally(&neg_phi);
-		let p: StateFormula<f64> = StateFormula::TransientQuery(
+		let eventually_abs: PathFormula = PathFormula::eventually(Interval::TimeUnbounded, &phi);
+		let globally_not_abs: PathFormula = PathFormula::globally(&neg_phi);
+		let p: StateFormula = StateFormula::TransientQuery(
 			ProbabilityQueryType::SimpleQuery,
 			Box::new(eventually_abs.clone()),
 		);
@@ -530,17 +766,42 @@ mod property_tests {
 
 	// #[test]
 	// fn negation_test() {
-	// let phi: StateFormula<f64> = StateFormula::AtomicProposition(evalexpr::)
+	// let phi: StateFormula = StateFormula::AtomicProposition(evalexpr::)
 	//unimplemented!();
 	//}
 
 	#[test]
+	fn evaluate_value_minus() {
+		let expr = AtomicExpression::BinaryOperator(
+			BinaryApOperator::Minus,
+			Box::new(AtomicExpression::Value(10)),
+			Box::new(AtomicExpression::Value(3)),
+		);
+		assert_eq!(expr.evaluate_value(), Some(7));
+	}
+
+	#[test]
 	fn parse_test() {
-		let prop_result = StateFormula::<f64>::parse(&"P=? [true U \"absorbing\"]");
+		let prop_result = StateFormula::parse(&"P=? [true U \"absorbing\"]");
 		match &prop_result {
 			Ok(prop) => println!("{}", prop.to_string()),
 			Err(err) => println!("Got error: {}", err),
 		}
 		assert!(prop_result.is_ok());
+	}
+
+	#[test]
+	fn atomic_proposition_parse_test() {
+		let ap = AtomicProposition::parse("x + 1 > 2").unwrap();
+		assert_eq!(ap.lhs, Box::new(AtomicExpression::BinaryOperator(
+			BinaryApOperator::Plus,
+			Box::new(AtomicExpression::Variable(VariableType::Name("x".to_string()))),
+			Box::new(AtomicExpression::Value(1)),
+		)));
+		assert_eq!(ap.operator, ComparisonOperator::Greater);
+		assert_eq!(ap.rhs, Box::new(AtomicExpression::Value(2)));
+		let ap2 = AtomicProposition::parse("bv[0, 3] <= 5").unwrap();
+		assert_eq!(ap2.operator, ComparisonOperator::LessEq);
+		assert!(AtomicProposition::parse("x >").is_err());
 	}
 }
