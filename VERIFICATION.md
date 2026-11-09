@@ -88,3 +88,13 @@ Run with:
 - **Floating point**: Verus does not reason about floating-point rounding; Fox-Glynn and
   uniformization are therefore validated empirically rather than proved.
 - **External solvers**: Storm comparisons require the `stormpy` Python package.
+
+## Other provers considered
+
+- **Creusot**: requires a custom Rust toolchain and Why3 (OCaml). The repository is checked out under
+  `~/.cargo/git/checkouts/creusot-*` but Why3 is not installed. To enable, install Why3 and build
+  `cargo-creusot` from that checkout, then annotate code with `#[requires]`/`#[ensures]`.
+- **Prusti**: requires Viper/Java and a specific Rust version; not installed.
+- **MIRAI/Flux**: not available in this environment.
+
+Cardio therefore uses Kani (for bounded model checking) and Verus (for deductive verification).
