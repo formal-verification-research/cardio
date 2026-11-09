@@ -52,7 +52,7 @@ where
 		let mut er2pi = epsilon * root2pi;
 
 		// Create the left and right bounds, which may be negative. Initialize them to zero
-		let mut left: isize = 0;
+		let mut left: isize;
 
 		// Like the main `fox_glynn` method, we get the mid-point from the value of lambda
 		let m = lambda.to_usize().unwrap();
