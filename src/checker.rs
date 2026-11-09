@@ -715,7 +715,15 @@ mod until_tests {
 		let relevant = labels.create_relevant(&phi_mask, mc.state_count());
 		let deadlock = mb.get_deadlocks();
 		let exit_rates = mb.row_sum_vec();
-		let mut ctx = CheckContext::initialize_with_abs(&mc, 1.0, 1e-9, relevant.clone(), relevant.clone(), deadlock, exit_rates);
+		let mut ctx = CheckContext::initialize_with_abs(
+			&mc,
+			1.0,
+			1e-9,
+			relevant.clone(),
+			relevant.clone(),
+			deadlock,
+			exit_rates,
+		);
 		let checker = CslChecker::default();
 		let interval = Interval::TimeBoundWindow(0.2, 1.0);
 		let dist = checker.compute_until(&mut ctx, interval, phi_mask, psi_mask);
@@ -734,7 +742,15 @@ mod until_tests {
 		let relevant = labels.create_relevant(&phi_mask, mc.state_count());
 		let deadlock = mb.get_deadlocks();
 		let exit_rates = mb.row_sum_vec();
-		let mut ctx = CheckContext::initialize_with_abs(&mc, 1.0, 1e-9, relevant.clone(), relevant.clone(), deadlock, exit_rates);
+		let mut ctx = CheckContext::initialize_with_abs(
+			&mc,
+			1.0,
+			1e-9,
+			relevant.clone(),
+			relevant.clone(),
+			deadlock,
+			exit_rates,
+		);
 		let checker = CslChecker::default();
 		let interval = Interval::TimeBoundedLower(0.5);
 		let dist = checker.compute_until(&mut ctx, interval, phi_mask, psi_mask);

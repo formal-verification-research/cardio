@@ -51,6 +51,7 @@ python tests/toy.py
 | `evaluate_value_plus_no_panic` | `src/property.rs` | Verified | Addition correctness |
 | `evaluate_value_multiply_no_panic` | `src/property.rs` | Verified | Multiplication correctness |
 | Labels `index_to_label` | `src/labels.rs` | Verified (Kani) | Unwind 4 |
+| Labels `add_label_to_state` (state 0) | `src/labels.rs` | Verified (Kani) | Unwind 4 |
 
 Run a single harness with:
 ```bash
@@ -80,9 +81,10 @@ Run with:
 
 ## Why some components are not verifiable
 
-- **BitVec-heavy code**: Kani struggles to unwind the internal loops of `bitvec` allocations, so
-  proofs involving `Labels` do not terminate in reasonable time. Refactoring these structures to
-  use plain `Vec<bool>` or small fixed-size arrays would make them Kani-friendly.
+- **BitVec-heavy code**: Kani struggles to unwind the internal loops of `bitvec`/`Vec` allocations,
+  so proofs involving `OptimalSprsMatBuilder` do not terminate in reasonable time. `Labels` now uses
+  `Vec<bool>` internally and has two Kani proofs. Further checker/matrix proofs require refactoring
+  those structures similarly.
 - **Floating point**: Verus does not reason about floating-point rounding; Fox-Glynn and
   uniformization are therefore validated empirically rather than proved.
 - **External solvers**: Storm comparisons require the `stormpy` Python package.

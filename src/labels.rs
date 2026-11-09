@@ -235,4 +235,11 @@ mod kani_proofs {
 		assert!(labels.index_to_label(idx).is_some());
 	}
 
+	#[kani::proof]
+	#[kani::unwind(4)]
+	fn add_label_state_zero_no_panic() {
+		let mut labels = Labels::with_abs_and_sat();
+		labels.add_label_to_state(1, 0);
+		assert!(labels.state_has_label(0, 1));
+	}
 }
