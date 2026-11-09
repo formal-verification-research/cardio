@@ -45,18 +45,42 @@ mod cardio {
 			env_logger::init();
 			debug!("Satisfying state count: {}", self.satisfying_state_count);
 			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
-			let relevant_bitmask = self
-				.labelling
-				.create_label_bitmask(vec!["absorbing".to_string(), "satisfying".to_string()]);
 			let state_count = model_context.state_count();
 			let deadlock_idxes = self.matrix_builder.get_deadlocks();
-			let relevant_states = self
-				.labelling
-				.create_relevant(&relevant_bitmask, state_count);
-			debug!(
-				"Relevant state count (from create_relevant): {}",
-				relevant_states.len()
+			let exit_rates = self.matrix_builder.row_sum_vec();
+
+			// `phi` is `true` for every state, which is represented by an empty label
+			// bitmask (no label requirements).
+			let phi_mask = self.labelling.create_label_bitmask(vec![]);
+			let psi_sat = self.labelling.create_label_bitmask(vec!["satisfying".to_string()]);
+			let psi_abs = self.labelling.create_label_bitmask(vec!["absorbing".to_string()]);
+
+			// Relevant states are those that satisfy phi (here, all states).
+			let relevant_states = self.labelling.create_relevant(&phi_mask, state_count);
+
+			info!("Creating CSL checker.");
+			let csl_checker: CslChecker = CslChecker::default();
+			let interval = Interval::TimeBoundedUpper(time_bound);
+
+			// Lower bound: probability of reaching a satisfying state.
+			let mut check_context: CheckContext = CheckContext::initialize_with_abs(
+				&model_context,
+				time_bound,
+				1e-9,
+				relevant_states.clone(),
+				relevant_states.clone(),
+				deadlock_idxes.clone(),
+				exit_rates.clone(),
 			);
+			let dist_lower = csl_checker.compute_until(
+				&mut check_context,
+				interval,
+				phi_mask.clone(),
+				psi_sat.clone(),
+			);
+			let lower_bound = dist_lower.get(1).copied().unwrap_or(0.0);
+
+			// Upper bound: also count paths that are absorbed before satisfying.
 			let mut check_context: CheckContext = CheckContext::initialize_with_abs(
 				&model_context,
 				time_bound,
@@ -64,49 +88,17 @@ mod cardio {
 				relevant_states.clone(),
 				relevant_states.clone(),
 				deadlock_idxes,
-				self.matrix_builder.row_sum_vec(),
+				exit_rates,
 			);
-
-			// check_context.build_one_step(non_sat_states, &row_sum_vec);
-			info!("Creating CSL checker.");
-			let csl_checker: CslChecker = CslChecker::default();
-			let interval = Interval::TimeBoundedUpper(time_bound);
-			// let property = StateFormula::TransientQuery(
-			// 	ProbabilityQueryType::SimpleQuery,
-			// 	Box::new(PathFormula::Until(
-			// 		Box::new(StateFormula::True),
-			// 		interval,
-			// 		Box::new(StateFormula::StringLabel("satisfying".to_string())),
-			// 	)),
-			// );
-			// let (lower_bound, upper_bound) = property.create_bounds().unwrap();
-			let distribution = csl_checker.compute_until(
+			let dist_abs = csl_checker.compute_until(
 				&mut check_context,
 				interval,
-				relevant_bitmask.clone(),
-				relevant_bitmask.clone(),
+				phi_mask,
+				psi_abs,
 			);
+			let absorption_prob = dist_abs.get(1).copied().unwrap_or(0.0);
+			let upper_bound = lower_bound + absorption_prob;
 
-			let (mut lower_bound, mut upper_bound): (f64, f64) = (0.0, 0.0);
-			let mut max_state_probability: f64 = 0.0;
-			let mut total_probability: f64 = 0.0;
-			for (state_id, probability) in distribution.iter() {
-				max_state_probability = max_state_probability.max(*probability);
-				total_probability += *probability;
-				debug!(
-					"\rMax state probability: {max_state_probability}. Total Probability: {total_probability}"
-				);
-				// if the state has the absorbing or satisfying label, then it can go
-				// to the upper_bound.
-				if self.labelling.state_has_labels(state_id, &relevant_bitmask) {
-					upper_bound += probability;
-					// If it does NOT have the absorbing label, it can go to the lower
-					// bound
-					if !self.labelling.state_has_label(state_id, 0) {
-						lower_bound += probability;
-					}
-				}
-			}
 			(lower_bound, upper_bound)
 		}
 	}

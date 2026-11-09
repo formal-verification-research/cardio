@@ -428,7 +428,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		// We have to do it this way since the `Sub` trait isn't implemented for sparse matrices.
 		let epoch = self.epoch();
 		let state_count = self.state_count;
-		info!("State count: {state_count}");
+
 		// TODO: remove this when we get direct CsMat construction to work
 		let mut m = sprs::TriMat::new((state_count, state_count));
 		for (row, col_option) in self.data.iter().enumerate() {
@@ -453,13 +453,13 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		let epoch = self.epoch();
 		info!("Uniformizing matrix with rate {epoch}");
 		let state_count = self.state_count;
-		info!("State count: {state_count}");
+
 		// TODO: Also remove this when direct CsMat construction works
 		let mut m = sprs::TriMat::new((state_count, state_count));
-		for (row, col_option) in self.data.iter().enumerate() {
+		for (row, col_option) in self.data.iter().take(state_count).enumerate() {
 			let exit_rate_opt = self.row_sum(row);
+			let mut had_self_loop: bool = false;
 			if let Some(col_data) = col_option {
-				let mut had_self_loop: bool = false;
 				for (col, value) in col_data.iter() {
 					if *col == row {
 						if let Some(exit_rate) = exit_rate_opt {
@@ -474,9 +474,13 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 						m.add_triplet(row, *col, *value / epoch);
 					}
 				}
-				if !had_self_loop {
-					// If the state never had a self-loop we have to manually add in a
-					// 1 on the diagonal.
+			}
+			if !had_self_loop {
+				// If the state never had a self-loop we have to manually add the
+				// remaining probability mass on the diagonal.
+				if let Some(exit_rate) = exit_rate_opt {
+					m.add_triplet(row, row, 1.0 - exit_rate / epoch);
+				} else {
 					m.add_triplet(row, row, 1.0);
 				}
 			}

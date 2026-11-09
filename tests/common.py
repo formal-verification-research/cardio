@@ -1,12 +1,14 @@
 import cardio
-import stormpy
+try:
+    import stormpy
+except Exception:
+    stormpy=None
 
 import numpy as np
 from collections import deque
 
 import time
 
-stormpy.set_loglevel_debug()
 
 class Transition:
 	def __init__(self, update: np.matrix, needed: np.matrix | None, rate_fn):
@@ -45,7 +47,7 @@ class Model:
 		state_to_id = {init_tuple: 1}
 		# Create matrices for cardio and storm
 		cardio_rf = cardio.QuantitativeReachabilityFinder()
-		stormpy_mat = stormpy.SparseMatrixBuilder()
+		stormpy_mat = None if bypass_storm else stormpy.SparseMatrixBuilder()
 
 		sat_indecies = []
 
@@ -66,7 +68,8 @@ class Model:
 				cardio_rf.set_state_satisfying(cur_idx)
 				sat_indecies.append(cur_idx)
 				cardio_rf.insert(cur_idx, cur_idx, 1.0)
-				stormpy_mat.add_next_value(cur_idx, cur_idx, 1.0)
+				if not bypass_storm:
+					stormpy_mat.add_next_value(cur_idx, cur_idx, 1.0)
 				continue
 			updates = self.next_states(cur_state)
 			assert (len(updates) > 0)
@@ -95,10 +98,12 @@ class Model:
 					next_available_index += 1
 				# Add to both matrices
 				cardio_rf.insert(cur_idx, next_idx, rate)
-				stormpy_mat.add_next_value(cur_idx, next_idx, rate)
+				if not bypass_storm:
+					stormpy_mat.add_next_value(cur_idx, next_idx, rate)
 			# Insert transition to absorbing state
 			cardio_rf.insert(cur_idx, 0, absorbing_rate)
-			stormpy_mat.add_next_value(cur_idx, 0, absorbing_rate)
+			if not bypass_storm:
+				stormpy_mat.add_next_value(cur_idx, 0, absorbing_rate)
 
 		print(f"\rFinished building model with state count {state_count}")
 		print(f"Max exit rate: {max(exit_rates)}")

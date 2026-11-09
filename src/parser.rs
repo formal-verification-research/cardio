@@ -5,6 +5,8 @@ use crate::property::{Interval, PathFormula, ProbabilityQueryType, StateFormula}
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
+	#[regex(r"[ \t\n\r]+", logos::skip)]
+	Whitespace,
 	#[regex(r"true")]
 	True,
 	#[regex(r"false")]
@@ -382,6 +384,14 @@ pub fn parse_path_formula<'a, I>(iter: &mut std::iter::Peekable<I>) -> Result<Pa
 where
 	I: Iterator<Item = &'a Token>,
 {
+	if let Some(Token::LBracket) = iter.peek() {
+		iter.next();
+		let inner = parse_path_formula(iter)?;
+		match iter.next() {
+			Some(Token::RBracket) => return Ok(inner),
+			_ => return Err("Expected closing bracket in path formula".to_string()),
+		}
+	}
 	match iter.peek() {
 		Some(Token::Globally) => {
 			iter.next();

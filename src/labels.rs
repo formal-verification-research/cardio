@@ -92,11 +92,13 @@ impl Labels {
 				labelling.len().max(state_index + 1),
 				empty_labelling.clone(),
 			);
-			// Update the count of labels
-			if labelling[state_index].len() >= label_index || labelling[state_index][label_index] {
+			// Update the count of labels and set the bit if it is not already set.
+			if label_index >= labelling[state_index].len() {
+				labelling[state_index].resize(label_count, false);
+			}
+			if !labelling[state_index][label_index] {
+				labelling[state_index].set(label_index, true);
 				self.label_names[label_index].1 += 1;
-			} else {
-				labelling[state_index].insert(label_index, true)
 			}
 		} else {
 			unimplemented!(); // Should we panic or create the state labelling?

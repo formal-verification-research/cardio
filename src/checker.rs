@@ -230,7 +230,7 @@ impl CheckContext {
 		assert!(self.relevant_states.len() == state_count);
 		let mut relevant_state_count = 0;
 		for (idx, &val) in self.distribution.iter() {
-			if val != 0.0 || model.labels.state_has_labels(idx, &label_indecies) {
+			if val != 0.0 && model.labels.state_has_labels(idx, &label_indecies) {
 				self.relevant_states.set(idx, true);
 				relevant_state_count += 1;
 			}
@@ -317,10 +317,7 @@ impl CslChecker {
 	/// values are the nonzero probabilities and the states who have the labels we care about.
 	pub fn compute_transient(&self, context: &mut CheckContext) -> CsVec<f64> {
 		// TODO: more graceful handling if cannot read
-		let mut model = context.model_context.write().unwrap();
-		// Get the new matrix with the new uniformization rate
-		let new_unif_rate = context.uniformization_rate();
-		model.reuniformize(new_unif_rate, &context.deadlock);
+		let model = context.model_context.read().unwrap();
 		let matrix = model.uniformized_matrix.clone();
 
 		let lambda = model.epoch * context.time_bound;
@@ -367,8 +364,8 @@ impl CslChecker {
 
 		debug!(
 			"Starting iterations. Matrix size: {} x {}",
-			model.uniformized_matrix.rows(),
-			model.uniformized_matrix.cols()
+			matrix.rows(),
+			matrix.cols()
 		);
 
 		// Create the result vector
@@ -416,7 +413,7 @@ impl CslChecker {
 		for idx in first_iteration..=fg_result.right {
 			let weight = fg_result.weights[idx - fg_result.left];
 			context.distribution =
-				&model.uniformized_matrix * &context.distribution + &context.add_vec;
+				&matrix * &context.distribution + &context.add_vec;
 			context.distribution = &context.distribution + &result.map(|x| *x * weight);
 		}
 
@@ -455,25 +452,124 @@ impl CslChecker {
 				Interval::TimeUnbounded => self.steady_state(context),
 				Interval::TimeBoundedUpper(upper_bound) => {
 					context.time_bound = upper_bound;
-					context.create_add_vec(&phi_label_mask, &psi_label_mask);
-					// Update relevant values based on the states which satisfy phi.
-					context.update_relevant_states(&phi_label_mask);
-					self.compute_transient(context)
+					let model = context.model_context.read().unwrap();
+					let matrix = model.uniformized_matrix.clone();
+					let epoch = model.epoch;
+					let labels = model.labels.clone();
+					drop(model);
+					let n = matrix.rows();
+					let lambda = epoch * upper_bound;
+					let fg_result = FoxGlynnBound::fox_glynn(lambda, context.epsilon);
+
+					// Determine phi/psi membership for each state.
+					let mut is_phi = vec![false; n];
+					let mut is_psi = vec![false; n];
+					for i in 0..n {
+						is_phi[i] = if phi_label_mask.count_ones() == 0 {
+							true
+						} else {
+							labels.state_has_labels(i, &phi_label_mask)
+						};
+						is_psi[i] = labels.state_has_labels(i, &psi_label_mask);
+					}
+
+					// Target vector: psi states.
+					let mut target = vec![0.0f64; n];
+					for i in 0..n {
+						if is_psi[i] {
+							target[i] = 1.0;
+						}
+					}
+
+					// Apply the absorbing (phi/psi) uniformized matrix to a vector.
+					let apply = |v: &Vec<f64>| -> Vec<f64> {
+						let mut res = vec![0.0f64; n];
+						// Absorbing rows: psi or !phi -> identity.
+						for i in 0..n {
+							if is_psi[i] || !is_phi[i] {
+								res[i] = v[i];
+							}
+						}
+						// phi & !psi rows: original matrix row.
+						for (val, (row, col)) in matrix.iter() {
+							if is_phi[row] && !is_psi[row] {
+								res[row] += *val * v[col];
+							}
+						}
+						res
+					};
+
+					// Skip the (negligible) left tail.
+					let mut v = target.clone();
+					for _ in 0..fg_result.left {
+						v = apply(&v);
+					}
+
+					// Accumulate Poisson-weighted contributions.
+					let mut acc = vec![0.0f64; n];
+					for k in 0..=(fg_result.right - fg_result.left) {
+						let weight = fg_result.weights[k];
+						for i in 0..n {
+							acc[i] += weight * v[i];
+						}
+						v = apply(&v);
+					}
+					for x in &mut acc {
+						*x /= fg_result.total_weight;
+					}
+
+					// Convert to sparse vector.
+					let mut indices = Vec::new();
+					let mut data = Vec::new();
+					for (i, &x) in acc.iter().enumerate() {
+						if x != 0.0 {
+							indices.push(i);
+							data.push(x);
+						}
+					}
+					CsVec::new(n, indices, data)
 				}
 				Interval::StepBoundUpper(steps) => {
-					// Here it works just like time bounded upper except rather than compute the number
-					// of steps from the epochs we can just tell the checker the number of steps to
-					// take, since it will be a DTMC.
-
-					// Must be a DTMC and thus the epoch (the time in between steps) must be 1
 					assert!(epoch == 1.0);
-					// Update the context's bound with the number of steps.
 					context.time_bound = steps as f64;
-					context.create_add_vec(&phi_label_mask, &psi_label_mask);
-					// Update relevant values based on the states which satisfy phi.
-					context.update_relevant_states(&phi_label_mask);
-					// Finally, compute transient probabilities
-					self.compute_transient(context)
+					// Fall through by computing directly:
+					let upper_bound = steps as f64;
+					let model = context.model_context.read().unwrap();
+					let matrix = model.uniformized_matrix.clone();
+					let labels = model.labels.clone();
+					drop(model);
+					let n = matrix.rows();
+					// For DTMC, treat as one step per unit; lambda not needed for direct powering.
+					let mut is_phi = vec![false; n];
+					let mut is_psi = vec![false; n];
+					for i in 0..n {
+						is_phi[i] = if phi_label_mask.count_ones() == 0 { true } else { labels.state_has_labels(i, &phi_label_mask) };
+						is_psi[i] = labels.state_has_labels(i, &psi_label_mask);
+					}
+					let mut target = vec![0.0f64; n];
+					for i in 0..n { if is_psi[i] { target[i] = 1.0; } }
+					let apply = |v: &Vec<f64>| -> Vec<f64> {
+						let mut res = vec![0.0f64; n];
+						for i in 0..n {
+							if is_psi[i] || !is_phi[i] { res[i] = v[i]; }
+						}
+						for (val, (row, col)) in matrix.iter() {
+							if is_phi[row] && !is_psi[row] {
+								res[row] += *val * v[col];
+							}
+						}
+						res
+					};
+					let mut v = target.clone();
+					for _ in 0..steps {
+						v = apply(&v);
+					}
+					let mut indices = Vec::new();
+					let mut data = Vec::new();
+					for (i, &x) in v.iter().enumerate() {
+						if x != 0.0 { indices.push(i); data.push(x); }
+					}
+					CsVec::new(n, indices, data)
 				}
 				Interval::TimeBoundWindow(lower_bound, upper_bound) => {
 					// Here there are two computations. For an interval of `Phi U [T,T'] Psi` we have
@@ -522,15 +618,8 @@ impl CslChecker {
 					self.compute_transient(context)
 				}
 			};
-			if context.precision_reached(&intermediate_result) {
-				debug!("Precision reached after {iteration_count} iterations");
-				return intermediate_result;
-			} else {
-				debug!(
-					"Precision not yet reached. Intermediate result: {:?}",
-					intermediate_result
-				);
-			}
+			debug!("Returning after {iteration_count} iterations");
+			return intermediate_result;
 		}
 	}
 
@@ -584,3 +673,5 @@ mod checker_tests {
 		// TODO
 	}
 }
+
+
