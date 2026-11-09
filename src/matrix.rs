@@ -44,21 +44,6 @@ impl CheckableNumber for f32 {}
 impl CheckableNumber for Rational64 {}
 impl CheckableNumber for Rational32 {}
 
-pub fn uniformize(
-	_matrix: &mut sprs::CsMat<f64>,
-	_maybe_states: &BitVec,
-	_unif_rate: f64,
-	_exit_rates: Vec<f64>,
-) {
-	debug!("Uniformizing matrix with uniformization rate {}", _unif_rate);
-
-	let _row: usize = 0;
-	for _state in _maybe_states.iter_ones() {
-		// We use csc so we iterate over the outer dimension that is columns
-		unimplemented!();
-	}
-}
-
 /// Uniformizes an infantesimile generator matrix for a markov automata
 pub fn uniformize_ma(
 	matrix: &mut sprs::CsMat<f64>,
