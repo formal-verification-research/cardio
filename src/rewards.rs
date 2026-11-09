@@ -107,7 +107,7 @@ where
 					let row = state_to_id(source.clone());
 					let col = state_to_id(dest.clone());
 
-					trew_matb.insert(row, col, tran_reward);
+					let _ = trew_matb.insert(row, col, tran_reward);
 				}
 			}
 		}

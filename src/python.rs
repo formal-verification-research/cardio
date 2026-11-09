@@ -31,8 +31,12 @@ mod cardio {
 		}
 
 		/// Insert a transition rate `entry` from `row` to `col`.
-		pub fn insert(&mut self, row: usize, col: usize, entry: f64) {
-			self.matrix_builder.insert(row, col, entry);
+		pub fn insert(&mut self, row: usize, col: usize, entry: f64) -> pyo3::PyResult<()> {
+			if !entry.is_finite() {
+				return Err(pyo3::exceptions::PyValueError::new_err("entry must be finite"));
+			}
+			let _ = self.matrix_builder.insert(row, col, entry);
+			Ok(())
 		}
 
 		/// Get the stored rate at (`row`, `col`), if any.
@@ -43,7 +47,7 @@ mod cardio {
 		/// Mark a state as satisfying the target predicate.
 		pub fn set_state_satisfying(&mut self, state_index: usize) {
 			self.satisfying_state_count += 1;
-			self.labelling.add_label_to_state(1, state_index);
+			let _ = self.labelling.add_label_to_state(1, state_index);
 		}
 
 		/// Build the uniformized matrix and return (lower_bound, upper_bound) reachability.
@@ -110,6 +114,100 @@ mod cardio {
 
 			Ok((lower_bound, upper_bound))
 		}
+
+		/// Build the uniformized matrix and return the window probability
+		/// P(phi U_[lower, upper] psi) for the initial state.
+		pub fn build_matrix_and_get_window(
+			&mut self,
+			lower: f64,
+			upper: f64,
+		) -> pyo3::PyResult<f64> {
+			if lower < 0.0 || upper < lower {
+				return Err(pyo3::exceptions::PyValueError::new_err(
+					"invalid window bounds",
+				));
+			}
+			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
+			let state_count = model_context.state_count();
+			let exit_rates = self.matrix_builder.row_sum_vec();
+			let phi_mask = self.labelling.create_label_bitmask(vec![]);
+			let psi_sat = self
+				.labelling
+				.create_label_bitmask(vec!["satisfying".to_string()]);
+			let relevant_states = self.labelling.create_relevant(&phi_mask, state_count);
+			let deadlock_idxes = self.matrix_builder.get_deadlocks();
+			let mut check_context = CheckContext::initialize_with_abs(
+				&model_context,
+				upper,
+				1e-9,
+				relevant_states.clone(),
+				relevant_states.clone(),
+				deadlock_idxes,
+				exit_rates,
+			);
+			let checker = CslChecker::default();
+			let interval = Interval::TimeBoundWindow(lower, upper);
+			let dist = checker.compute_until(&mut check_context, interval, phi_mask, psi_sat);
+			Ok(dist.get(1).copied().unwrap_or(0.0))
+		}
+
+		/// Build the uniformized matrix and return the lower-bounded probability
+		/// P(phi U_[lower, oo) psi) for the initial state.
+		pub fn build_matrix_and_get_lower(&mut self, lower: f64) -> pyo3::PyResult<f64> {
+			if lower < 0.0 {
+				return Err(pyo3::exceptions::PyValueError::new_err(
+					"lower bound must be non-negative",
+				));
+			}
+			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
+			let state_count = model_context.state_count();
+			let exit_rates = self.matrix_builder.row_sum_vec();
+			let phi_mask = self.labelling.create_label_bitmask(vec![]);
+			let psi_sat = self
+				.labelling
+				.create_label_bitmask(vec!["satisfying".to_string()]);
+			let relevant_states = self.labelling.create_relevant(&phi_mask, state_count);
+			let deadlock_idxes = self.matrix_builder.get_deadlocks();
+			let mut check_context = CheckContext::initialize_with_abs(
+				&model_context,
+				lower.max(1.0),
+				1e-9,
+				relevant_states.clone(),
+				relevant_states.clone(),
+				deadlock_idxes,
+				exit_rates,
+			);
+			let checker = CslChecker::default();
+			let interval = Interval::TimeBoundedLower(lower);
+			let dist = checker.compute_until(&mut check_context, interval, phi_mask, psi_sat);
+			Ok(dist.get(1).copied().unwrap_or(0.0))
+		}
+
+		/// Build the uniformized matrix and return the one-step probability
+		/// (in the uniformized chain) that the next state is satisfying.
+		pub fn build_matrix_and_get_next(&mut self) -> pyo3::PyResult<f64> {
+			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
+			let state_count = model_context.state_count();
+			let exit_rates = self.matrix_builder.row_sum_vec();
+			let phi_mask = self.labelling.create_label_bitmask(vec![]);
+			let psi_sat = self
+				.labelling
+				.create_label_bitmask(vec!["satisfying".to_string()]);
+			let relevant_states = self.labelling.create_relevant(&phi_mask, state_count);
+			let deadlock_idxes = self.matrix_builder.get_deadlocks();
+			let mut check_context = CheckContext::initialize_with_abs(
+				&model_context,
+				1.0,
+				1e-9,
+				relevant_states.clone(),
+				relevant_states.clone(),
+				deadlock_idxes,
+				exit_rates,
+			);
+			let checker = CslChecker::default();
+			let dist = checker.compute_next(&mut check_context, psi_sat);
+			Ok(dist.get(1).copied().unwrap_or(0.0))
+		}
 	}
 
 	#[pyo3::pymodule]
@@ -117,9 +215,15 @@ mod cardio {
 		use crate::poisson::FoxGlynnBound;
 		/// Fox-Glynn truncation helper. Returns (left, right, total_weight, weights).
 		#[pyo3::pyfunction]
-		pub fn fg_find(lambda: f64, epsilon: f64) -> (usize, usize, f64, Vec<f64>) {
+		pub fn fg_find(lambda: f64, epsilon: f64) -> pyo3::PyResult<(usize, usize, f64, Vec<f64>)> {
+			if !lambda.is_finite() || lambda <= 0.0 {
+				return Err(pyo3::exceptions::PyValueError::new_err("lambda must be positive and finite"));
+			}
+			if !epsilon.is_finite() || epsilon <= 0.0 {
+				return Err(pyo3::exceptions::PyValueError::new_err("epsilon must be positive and finite"));
+			}
 			let bound = FoxGlynnBound::<f64>::fox_glynn(lambda, epsilon);
-			(bound.left, bound.right, bound.total_weight, bound.weights)
+			Ok((bound.left, bound.right, bound.total_weight, bound.weights))
 		}
 	}
 }

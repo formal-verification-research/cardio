@@ -51,12 +51,11 @@ pub fn reuniformize_ma(
 	old_unif_rate: f64,
 	new_unif_rate: f64,
 	_deadlock: &BitVec,
-) {
+) -> Result<(), String> {
 	if old_unif_rate == new_unif_rate {
-		// No need to re-uniformize
-		return;
+		return Ok(());
 	} else if old_unif_rate > new_unif_rate {
-		panic!("Cannot re-uniformize to smaller uniformization rate!");
+		return Err("Cannot re-uniformize to a smaller uniformization rate!".to_string());
 	}
 	let _diff = new_unif_rate - old_unif_rate;
 	let ratio = old_unif_rate / new_unif_rate;
@@ -73,6 +72,7 @@ pub fn reuniformize_ma(
 			}
 		}
 	}
+	Ok(())
 }
 
 /// A trait that represents any type of sparse matrix construction.
@@ -82,7 +82,7 @@ pub trait SprsMatBuilder {
 	fn get_value(&self, row: usize, col: usize) -> Option<f64>;
 	/// Inserts an element. Depending on the struct implementing this trait, this function may
 	/// either replace existing values, or just panic if a value already exists.
-	fn insert(&mut self, row: usize, col: usize, entry: f64);
+	fn insert(&mut self, row: usize, col: usize, entry: f64) -> Result<(), String>;
 	/// Inserts an entire row. Again, depending on the struct implementing the trait, this function
 	/// may replace the entire row, or panic if the row is not none.
 	fn insert_row<I>(&mut self, row: usize, elements: I)
@@ -90,7 +90,7 @@ pub trait SprsMatBuilder {
 		I: ExactSizeIterator<Item = (usize, f64)>,
 	{
 		for (col, entry) in elements {
-			self.insert(row, col, entry);
+			let _ = self.insert(row, col, entry);
 		}
 	}
 	/// The number of rows
@@ -249,10 +249,10 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 	}
 
 	/// Inserts or replaces a value at the position `row, col` in the matrix.
-	fn insert(&mut self, row: usize, col: usize, entry: f64) {
+	fn insert(&mut self, row: usize, col: usize, entry: f64) -> Result<(), String> {
 		// No need to add if the entry is zero
 		if entry == 0.0 {
-			return;
+			return Ok(());
 		}
 		self.state_count = self.state_count.max(row + 1).max(col + 1);
 		// Call resize regardless since it will do nothing if we have enough capacity
@@ -281,6 +281,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		} else {
 			self.length += 1;
 		}
+		Ok(())
 	}
 
 	/// Inserts an entire row in the sparse matrix.
@@ -293,10 +294,13 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 	{
 		// As before, resize.
 		self.resize(row);
+		self.state_count = self.state_count.max(row + 1);
 		// Create a new VecMap with the capacity of the length of `elements`
 		self.data[row] = Some(VecMap::with_capacity(elements.len()));
 		let row_values = &mut self.data[row].as_mut().unwrap();
 		for (col, entry) in elements {
+			self.state_count = self.state_count.max(col + 1);
+			self.queued_new_size = self.queued_new_size.max(col);
 			if let Some(_old_value) = row_values.insert(col, entry) {
 				warn!("Overwrite inserting row into matrix at row {}", row);
 			} else {
@@ -370,6 +374,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 				}
 			}
 		}
+		let epoch = if epoch == 0.0 { 1.0 } else { epoch };
 		(
 			epoch,
 			CsMat::new_csc((state_count, state_count), rows, cols, values),
@@ -383,7 +388,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		if epoch == 0.0 {
 			epoch = 1.0;
 		}
-		let state_count = self.state_count;
+		let state_count = self.state_count.max(self.data.len());
 
 		// TODO: remove this when we get direct CsMat construction to work
 		let mut m = sprs::TriMat::new((state_count, state_count));
@@ -411,7 +416,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 			epoch = 1.0;
 		}
 		info!("Uniformizing matrix with rate {epoch}");
-		let state_count = self.state_count;
+		let state_count = self.state_count.max(self.data.len());
 
 		// TODO: Also remove this when direct CsMat construction works
 		let mut m = sprs::TriMat::new((state_count, state_count));
@@ -452,8 +457,9 @@ type ExplicitSprsMatBuilder = sprs::TriMat<f64>;
 
 impl SprsMatBuilder for ExplicitSprsMatBuilder {
 	/// See documentation for `TriMat::add_triplet`
-	fn insert(&mut self, row: usize, col: usize, entry: f64) {
+	fn insert(&mut self, row: usize, col: usize, entry: f64) -> Result<(), String> {
 		self.add_triplet(row, col, entry);
+		Ok(())
 	}
 
 	/// Only returns the first time the triplet was added

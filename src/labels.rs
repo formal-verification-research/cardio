@@ -31,7 +31,7 @@ impl Labels {
 			label_names: vec![("absorbing".to_string(), 0)],
 			state_labelling: Some(Vec::new()),
 		};
-		labelling.add_label_to_state(0, 0);
+		let _ = labelling.add_label_to_state(0, 0);
 		labelling
 	}
 
@@ -42,7 +42,7 @@ impl Labels {
 			label_names: vec![("absorbing".to_string(), 0), ("satisfying".to_string(), 1)],
 			state_labelling: Some(Vec::new()),
 		};
-		labelling.add_label_to_state(0, 0);
+		let _ = labelling.add_label_to_state(0, 0);
 		labelling
 	}
 
@@ -71,30 +71,27 @@ impl Labels {
 	}
 
 	/// Adds a new label to the labelling structure and returns its index
-	pub fn add_label(&mut self, label_name: &str) -> usize {
-		if let Some(_) = &self.state_labelling {
-			panic!("Cannot add new label after state labelling has already been constructed.");
+	pub fn add_label(&mut self, label_name: &str) -> Result<usize, String> {
+		if self.state_labelling.is_some() {
+			Err("Cannot add new label after state labelling has already been constructed.".to_string())
 		} else {
 			self.label_names.push((label_name.to_string(), 0));
-			self.label_names.len() - 1
+			Ok(self.label_names.len() - 1)
 		}
 	}
 
 	/// Adds a label to a state given the state's index.
-	pub fn add_label_to_state(&mut self, label_index: usize, state_index: usize) {
+	pub fn add_label_to_state(&mut self, label_index: usize, state_index: usize) -> Result<(), String> {
 		let label_count = self.label_count();
-		assert!(label_index < label_count);
+		if label_index >= label_count {
+			return Err(format!("label_index {label_index} out of range (count {label_count})"));
+		}
 		if self.state_labelling.is_none() {
 			self.state_labelling = Some(Vec::new());
 		}
 		if let Some(labelling) = &mut self.state_labelling {
-			// Resize the state labelling to the state index we've seen.
 			let empty_labelling = vec![false; label_count];
-			labelling.resize(
-				labelling.len().max(state_index + 1),
-				empty_labelling.clone(),
-			);
-			// Update the count of labels and set the bit if it is not already set.
+			labelling.resize(labelling.len().max(state_index + 1), empty_labelling.clone());
 			if labelling[state_index].len() < label_count {
 				labelling[state_index].resize(label_count, false);
 			}
@@ -103,6 +100,7 @@ impl Labels {
 				self.label_names[label_index].1 += 1;
 			}
 		}
+		Ok(())
 	}
 
 	/// Gets whether or not a state has a particular label. If the label index exceeds the
@@ -111,7 +109,9 @@ impl Labels {
 	/// existing states, then it just returns false.
 	pub fn state_has_label(&self, state_index: usize, label_index: usize) -> bool {
 		let label_count = self.label_count();
-		assert!(label_index < label_count);
+		if label_index >= label_count {
+			return false;
+		}
 		if let Some(labelling) = &self.state_labelling {
 			if state_index >= labelling.len() {
 				false
@@ -129,7 +129,9 @@ impl Labels {
 	/// to be true for the state at `state_index` in order for the function to return true.
 	pub fn state_has_labels(&self, state_index: usize, label_bitmask: &BitVec) -> bool {
 		let label_count = self.label_count();
-		assert!(label_bitmask.len() <= label_count);
+		if label_bitmask.len() > label_count {
+			return false;
+		}
 		if let Some(labelling) = &self.state_labelling {
 			if state_index >= labelling.len() {
 				false

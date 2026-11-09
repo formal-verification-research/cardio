@@ -77,7 +77,7 @@ Run with:
 - Prove Fox-Glynn truncation bounds (currently validated empirically vs. SciPy).
 - Prove checker transient/until algorithms (currently validated empirically vs. Storm).
 - Add randomized differential tests for `TimeBoundWindow` and `TimeBoundedLower`.
-- `ExplicitSprsMatBuilder::to_unif_matrix` is now implemented; `to_emb_dtmc` and `AtomicProposition::parse` remain unimplemented (experimental/unused).
+- `ExplicitSprsMatBuilder::to_unif_matrix` and `to_emb_dtmc` are implemented; `AtomicProposition::parse` is now implemented. Remaining experimental items: reward model checking and PCTL operators beyond bounded until.
 
 ## Why some components are not verifiable
 

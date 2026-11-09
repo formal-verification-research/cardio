@@ -25,6 +25,7 @@ pub enum ComparisonOperator {
 	LessEq,
 	Greater,
 	Less,
+	NotEqual,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -125,6 +126,166 @@ pub struct AtomicProposition {
 	rhs: Box<AtomicExpression>,
 }
 
+
+/// Parse a simple arithmetic atomic expression.
+fn parse_atomic_expression(input: &str) -> Result<AtomicExpression, String> {
+	let mut p = AtomicExprParser::new(input);
+	let expr = p.parse_expr()?;
+	p.skip_ws();
+	if p.pos != p.chars.len() {
+		return Err(format!("Unexpected trailing input: {}", &input[p.pos..]));
+	}
+	Ok(expr)
+}
+
+struct AtomicExprParser {
+	chars: Vec<char>,
+	pos: usize,
+}
+
+impl AtomicExprParser {
+	fn new(input: &str) -> Self {
+		Self {
+			chars: input.chars().collect(),
+			pos: 0,
+		}
+	}
+
+	fn skip_ws(&mut self) {
+		while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
+			self.pos += 1;
+		}
+	}
+
+	fn parse_expr(&mut self) -> Result<AtomicExpression, String> {
+		self.parse_add_sub()
+	}
+
+	fn parse_add_sub(&mut self) -> Result<AtomicExpression, String> {
+		let mut left = self.parse_mul()?;
+		loop {
+			self.skip_ws();
+			if self.pos < self.chars.len() && (self.chars[self.pos] == '+' || self.chars[self.pos] == '-') {
+				let op = if self.chars[self.pos] == '+' {
+					BinaryApOperator::Plus
+				} else {
+					BinaryApOperator::Minus
+				};
+				self.pos += 1;
+				let right = self.parse_mul()?;
+				left = AtomicExpression::BinaryOperator(op, Box::new(left), Box::new(right));
+			} else {
+				break;
+			}
+		}
+		Ok(left)
+	}
+
+	fn parse_mul(&mut self) -> Result<AtomicExpression, String> {
+		let mut left = self.parse_primary()?;
+		loop {
+			self.skip_ws();
+			if self.pos < self.chars.len() && self.chars[self.pos] == '*' {
+				self.pos += 1;
+				let right = self.parse_primary()?;
+				left = AtomicExpression::BinaryOperator(
+					BinaryApOperator::Multipy,
+					Box::new(left),
+					Box::new(right),
+				);
+			} else {
+				break;
+			}
+		}
+		Ok(left)
+	}
+
+	fn parse_primary(&mut self) -> Result<AtomicExpression, String> {
+		self.skip_ws();
+		if self.pos >= self.chars.len() {
+			return Err("Unexpected end of expression".to_string());
+		}
+		if self.chars[self.pos] == '(' {
+			self.pos += 1;
+			let expr = self.parse_expr()?;
+			self.skip_ws();
+			if self.pos >= self.chars.len() || self.chars[self.pos] != ')' {
+				return Err("Expected ')'".to_string());
+			}
+			self.pos += 1;
+			return Ok(expr);
+		}
+		if self.chars[self.pos] == '-' {
+			self.pos += 1;
+			let inner = self.parse_primary()?;
+			// Represent unary minus as 0 - expr.
+			return Ok(AtomicExpression::BinaryOperator(
+				BinaryApOperator::Minus,
+				Box::new(AtomicExpression::Value(0)),
+				Box::new(inner),
+			));
+		}
+		if self.chars[self.pos].is_ascii_digit() {
+			let start = self.pos;
+			while self.pos < self.chars.len() && self.chars[self.pos].is_ascii_digit() {
+				self.pos += 1;
+			}
+			let num_str: String = self.chars[start..self.pos].iter().collect();
+			let val: i64 = num_str
+				.parse()
+				.map_err(|_| "Invalid integer".to_string())?;
+			return Ok(AtomicExpression::Value(val));
+		}
+		if self.chars[self.pos].is_alphabetic() || self.chars[self.pos] == '_' {
+			let start = self.pos;
+			while self.pos < self.chars.len()
+				&& (self.chars[self.pos].is_alphanumeric() || self.chars[self.pos] == '_')
+			{
+				self.pos += 1;
+			}
+			let name: String = self.chars[start..self.pos].iter().collect();
+			self.skip_ws();
+			if self.pos < self.chars.len() && self.chars[self.pos] == '[' {
+				// Bit index range bv[lower, upper]
+				self.pos += 1;
+				self.skip_ws();
+				let lower = self.parse_integer()?;
+				self.skip_ws();
+				if self.pos >= self.chars.len() || self.chars[self.pos] != ',' {
+					return Err("Expected ',' in bit index range".to_string());
+				}
+				self.pos += 1;
+				self.skip_ws();
+				let upper = self.parse_integer()?;
+				self.skip_ws();
+				if self.pos >= self.chars.len() || self.chars[self.pos] != ']' {
+					return Err("Expected ']' in bit index range".to_string());
+				}
+				self.pos += 1;
+				return Ok(AtomicExpression::Variable(VariableType::BitIndecies(
+					lower, upper,
+				)));
+			}
+			return Ok(AtomicExpression::Variable(VariableType::Name(name)));
+		}
+		Err(format!("Unexpected character: {}", self.chars[self.pos]))
+	}
+
+	fn parse_integer(&mut self) -> Result<usize, String> {
+		self.skip_ws();
+		let start = self.pos;
+		while self.pos < self.chars.len() && self.chars[self.pos].is_ascii_digit() {
+			self.pos += 1;
+		}
+		if start == self.pos {
+			return Err("Expected integer".to_string());
+		}
+		let s: String = self.chars[start..self.pos].iter().collect();
+		let v: usize = s.parse().map_err(|_| "Invalid integer".to_string())?;
+		Ok(v)
+	}
+}
+
 impl Property for AtomicProposition {
 	fn is_pctl(&self) -> bool {
 		// All atomic propositions on states can be checked in CSL
@@ -135,10 +296,80 @@ impl Property for AtomicProposition {
 	where
 		Self: Sized,
 	{
-		// Atomic proposition parsing is not yet implemented; return an error rather
-		// than panicking so callers can handle it gracefully.
-		let _ = lex(input);
-		Err("AtomicProposition parsing is not yet implemented".to_string())
+		// Trim and locate the top-level comparison operator.
+		let s = input.trim();
+		if s.is_empty() {
+			return Err("Empty atomic proposition".to_string());
+		}
+		let mut depth = 0usize;
+		let mut op_pos: Option<usize> = None;
+		let mut op_len = 0usize;
+		let mut operator = ComparisonOperator::Eq;
+		let bytes = s.as_bytes();
+		let mut i = 0usize;
+		while i < s.len() {
+			let c = bytes[i] as char;
+			match c {
+				'(' => depth += 1,
+				')' => {
+					if depth == 0 {
+						return Err("Unbalanced parentheses".to_string());
+					}
+					depth -= 1;
+				}
+				'<' | '>' | '=' | '!' if depth == 0 => {
+					// Try two-character operators first.
+					let two = if i + 1 < s.len() {
+						&s[i..i + 2]
+					} else {
+						""
+					};
+					let (len, op) = if two == "<=" {
+						(2, ComparisonOperator::LessEq)
+					} else if two == ">=" {
+						(2, ComparisonOperator::GreaterEq)
+					} else if two == "==" {
+						(2, ComparisonOperator::Eq)
+					} else if two == "!=" {
+						(2, ComparisonOperator::NotEqual)
+					} else {
+						match c {
+							'<' => (1, ComparisonOperator::Less),
+							'>' => (1, ComparisonOperator::Greater),
+							'=' => (1, ComparisonOperator::Eq),
+							'!' => return Err("Unexpected '!' in atomic proposition".to_string()),
+							_ => (0, ComparisonOperator::Eq),
+						}
+					};
+					if len > 0 && op_pos.is_none() {
+						op_pos = Some(i);
+						op_len = len;
+						operator = op;
+					}
+				}
+				_ => {}
+			}
+			i += c.len_utf8();
+		}
+		if depth != 0 {
+			return Err("Unbalanced parentheses".to_string());
+		}
+		let pos = match op_pos {
+			Some(p) => p,
+			None => return Err("Missing comparison operator in atomic proposition".to_string()),
+		};
+		let lhs_str = s[..pos].trim();
+		let rhs_str = s[pos + op_len..].trim();
+		if lhs_str.is_empty() || rhs_str.is_empty() {
+			return Err("Missing operand in atomic proposition".to_string());
+		}
+		let lhs = parse_atomic_expression(lhs_str)?;
+		let rhs = parse_atomic_expression(rhs_str)?;
+		Ok(Self {
+			lhs: Box::new(lhs),
+			operator,
+			rhs: Box::new(rhs),
+		})
 	}
 }
 
@@ -512,8 +743,8 @@ mod kani_proofs {
 #[cfg(test)]
 mod property_tests {
 	use super::{
-		AtomicExpression, BinaryApOperator, Interval, PathFormula, ProbabilityQueryType, Property,
-		StateFormula,
+		AtomicExpression, AtomicProposition, BinaryApOperator, ComparisonOperator, Interval, PathFormula,
+		ProbabilityQueryType, Property, StateFormula, VariableType,
 	};
 
 	#[test]
@@ -557,5 +788,20 @@ mod property_tests {
 			Err(err) => println!("Got error: {}", err),
 		}
 		assert!(prop_result.is_ok());
+	}
+
+	#[test]
+	fn atomic_proposition_parse_test() {
+		let ap = AtomicProposition::parse("x + 1 > 2").unwrap();
+		assert_eq!(ap.lhs, Box::new(AtomicExpression::BinaryOperator(
+			BinaryApOperator::Plus,
+			Box::new(AtomicExpression::Variable(VariableType::Name("x".to_string()))),
+			Box::new(AtomicExpression::Value(1)),
+		)));
+		assert_eq!(ap.operator, ComparisonOperator::Greater);
+		assert_eq!(ap.rhs, Box::new(AtomicExpression::Value(2)));
+		let ap2 = AtomicProposition::parse("bv[0, 3] <= 5").unwrap();
+		assert_eq!(ap2.operator, ComparisonOperator::LessEq);
+		assert!(AtomicProposition::parse("x >").is_err());
 	}
 }
