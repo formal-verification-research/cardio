@@ -1,27 +1,27 @@
-use std::ops::{Add, BitAnd, Not};
+use std::ops::BitAnd;
 use std::sync::RwLock;
 
+use crate::labels;
 use crate::matrix::*;
+use crate::property::Interval;
 use crate::poisson::FoxGlynnBound;
-use crate::*;
 
 use bitvec::prelude::*;
 use log::*;
-use num::traits::{Bounded, real::Real};
-use sprs::{CsMat, CsVec, CsVecBase};
 
-use self::property::Interval;
+use sprs::{CsMat, CsVec};
+
 
 /// A CTMC transition matrix
 pub trait CtmcTransMat {
-	fn uniformize(rate_mat: Self) -> Self;
+	fn uniformize(_rate_mat: Self) -> Self;
 }
 
 impl CtmcTransMat for sprs::CsMat<f64>
 where
 	f64: num::Num + Clone,
 {
-	fn uniformize(rate_mat: Self) -> Self {
+	fn uniformize(_rate_mat: Self) -> Self {
 		unimplemented!();
 	}
 }
@@ -84,10 +84,6 @@ pub struct CheckContext {
 	time_bound: f64,
 	/// The numerical precision
 	epsilon: f64,
-	/// The states for which we perform model checking
-	checked_values: BitVec,
-	/// Deadlock states
-	deadlock: BitVec,
 	/// Exit rates for each row
 	exit_rates: Vec<f64>,
 	/// The value we add during the self multiplication
@@ -106,8 +102,8 @@ impl CheckContext {
 		time_bound: f64,
 		precision: f64,
 		relevant_states: BitVec,
-		checked_values: BitVec,
-		deadlock: BitVec,
+		_checked_values: BitVec,
+		_deadlock: BitVec,
 		exit_rates: Vec<f64>,
 	) -> Self {
 		let num_states = model_context.uniformized_matrix.cols();
@@ -120,9 +116,7 @@ impl CheckContext {
 			model_context: RwLock::new((*model_context).clone()),
 			time_bound,
 			epsilon: precision,
-			checked_values,
 			exit_rates,
-			deadlock,
 			add_vec: CsVec::empty(num_states), // TODO: I think this is where the error
 			// lies. This should be the one-step vector
 			relevant_states,
@@ -262,10 +256,9 @@ impl CheckContext {
 		let mut pns: BitVec = BitVec::with_capacity(state_count);
 		// Initialize the bitvector to all zeros
 		(0..state_count).for_each(|_| pns.push(false));
-		for (idx, &val) in self.distribution.iter() {
-			if val != 0.0
-				|| (model.labels.state_has_labels(idx, &phi)
-					&& !model.labels.state_has_labels(idx, &psi))
+		for idx in 0..state_count {
+			if model.labels.state_has_labels(idx, &phi)
+				&& !model.labels.state_has_labels(idx, &psi)
 			{
 				pns.set(idx, true);
 			}
@@ -301,14 +294,12 @@ impl CheckContext {
 
 /// A CSL or PCTL model checker.
 pub struct CslChecker {
-	qualitative: bool,
 	use_mixed_poisson: bool,
 }
 
 impl CslChecker {
-	pub fn new(qualitative: bool, use_mixed_poisson: bool) -> Self {
+	pub fn new(use_mixed_poisson: bool) -> Self {
 		Self {
-			qualitative,
 			use_mixed_poisson,
 		}
 	}
@@ -442,7 +433,6 @@ impl CslChecker {
 		let epoch = context.epoch();
 		// Loop until we've reached the desired termination.
 		let mut iteration_count = 0;
-		let num_states = context.exit_rates.len();
 		// TODO: figure out if there's a way to eliminate these .clone() calls
 		loop {
 			iteration_count += 1;
@@ -533,7 +523,7 @@ impl CslChecker {
 					assert!(epoch == 1.0);
 					context.time_bound = steps as f64;
 					// Fall through by computing directly:
-					let upper_bound = steps as f64;
+					let _upper_bound = steps as f64;
 					let model = context.model_context.read().unwrap();
 					let matrix = model.uniformized_matrix.clone();
 					let labels = model.labels.clone();
@@ -648,10 +638,10 @@ impl CslChecker {
 	/// A parallelized version of `distribution_timeline()`.
 	pub fn distribution_timeline_concurrent(
 		&self,
-		context: &mut CheckContext,
-		num_epochs: usize,
-		epoch_step: usize,
-		num_threads: usize,
+		_context: &mut CheckContext,
+		_num_epochs: usize,
+		_epoch_step: usize,
+		_num_threads: usize,
 	) -> Vec<(f64, CsVec<f64>)> {
 		unimplemented!();
 	}
@@ -659,7 +649,7 @@ impl CslChecker {
 
 impl Default for CslChecker {
 	fn default() -> Self {
-		Self::new(true, true)
+		Self::new(true)
 	}
 }
 

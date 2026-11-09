@@ -45,15 +45,15 @@ impl CheckableNumber for Rational64 {}
 impl CheckableNumber for Rational32 {}
 
 pub fn uniformize(
-	matrix: &mut sprs::CsMat<f64>,
-	maybe_states: &BitVec,
-	unif_rate: f64,
-	exit_rates: Vec<f64>,
+	_matrix: &mut sprs::CsMat<f64>,
+	_maybe_states: &BitVec,
+	_unif_rate: f64,
+	_exit_rates: Vec<f64>,
 ) {
-	debug!("Uniformizing matrix with uniformization rate {}", unif_rate);
+	debug!("Uniformizing matrix with uniformization rate {}", _unif_rate);
 
-	let mut row: usize = 0;
-	for state in maybe_states.iter_ones() {
+	let _row: usize = 0;
+	for _state in _maybe_states.iter_ones() {
 		// We use csc so we iterate over the outer dimension that is columns
 		unimplemented!();
 	}
@@ -102,7 +102,7 @@ pub fn reuniformize_ma(
 	// steps: &mut Vec<(usize, f64)>,
 	old_unif_rate: f64,
 	new_unif_rate: f64,
-	deadlock: &BitVec,
+	_deadlock: &BitVec,
 ) {
 	if old_unif_rate == new_unif_rate {
 		// No need to re-uniformize
@@ -110,18 +110,18 @@ pub fn reuniformize_ma(
 	} else if old_unif_rate > new_unif_rate {
 		panic!("Cannot re-uniformize to smaller uniformization rate!");
 	}
-	let diff = new_unif_rate - old_unif_rate;
+	let _diff = new_unif_rate - old_unif_rate;
 	let ratio = old_unif_rate / new_unif_rate;
 
 	// Iterate over columns
 	for (col_idx, mut col) in matrix.outer_iterator_mut().enumerate() {
-		for (row_idx, mut val_ref) in col.iter_mut() {
+		for (row_idx, val_ref) in col.iter_mut() {
 			if row_idx == col_idx {
-				*val_ref -= 1.0;
-				*val_ref *= ratio;
-				*val_ref += 1.0;
+				(*val_ref) -= 1.0;
+				(*val_ref) *= ratio;
+				(*val_ref) += 1.0;
 			} else {
-				*val_ref *= ratio;
+				(*val_ref) *= ratio;
 			}
 		}
 	}
@@ -374,16 +374,16 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 
 	/// I attempted to optimize this function by pre-allocating the size for each triplet vector
 	fn to_sparse_matrix(&mut self) -> sprs::CsMat<f64> {
-		let state_count = self.len();
-		let mut rows = Vec::<usize>::with_capacity(state_count);
-		let mut cols = Vec::<usize>::with_capacity(state_count);
-		let mut values = Vec::<f64>::with_capacity(state_count);
+		let state_count = self.state_count.max(self.data.len());
+		let mut rows = Vec::<usize>::with_capacity(self.len());
+		let mut cols = Vec::<usize>::with_capacity(self.len());
+		let mut values = Vec::<f64>::with_capacity(self.len());
 		for (row, col_option) in self.data.iter().enumerate() {
 			if let Some(col_data) = col_option {
 				for (col, value) in col_data.iter() {
 					rows.push(row);
 					cols.push(*col);
-					values.push(-value);
+					values.push(*value);
 				}
 			}
 		}
@@ -576,6 +576,28 @@ mod matrix_tests {
 		assert_eq!(mat_builder.len(), 1);
 		assert_eq!(mat_builder.get_value(1, 6), Some(0.2));
 		assert_eq!(mat_builder.get_value(2, 6), None);
+	}
+
+	#[test]
+	fn randomized_roundtrip() {
+		let mut mb = OptimalSprsMatBuilder::new();
+		// Deterministic pseudo-random entries
+		let mut seed: u64 = 12345;
+		use std::collections::BTreeMap;
+		let mut final_vals: BTreeMap<(usize, usize), f64> = BTreeMap::new();
+		for _ in 0..200 {
+			seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+			let row = (seed >> 32) as usize % 50;
+			seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
+			let col = (seed >> 32) as usize % 50;
+			let val = ((seed as f64) / (u64::MAX as f64)).abs() + 0.001;
+			mb.insert(row, col, val);
+			final_vals.insert((row, col), val);
+		}
+		for ((row, col), val) in final_vals {
+			let got = mb.get_value(row, col).unwrap();
+			assert!((got - val).abs() < 1e-12);
+		}
 	}
 
 	#[test]

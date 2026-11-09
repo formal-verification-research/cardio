@@ -126,7 +126,7 @@ class Model:
 			stormpy_labels.add_label_to_state("init", 1)
 			for idx in sat_indecies:
 				# print(f"\r{idx}", end="")
-				stormpy_labels.add_label_to_state("satisfying", next_idx)
+				stormpy_labels.add_label_to_state("satisfying", idx)
 			m = stormpy_mat.build()
 			# print(f"\n{m.nr_rows}")
 			components = stormpy.SparseModelComponents(

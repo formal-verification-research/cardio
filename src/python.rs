@@ -42,7 +42,7 @@ mod cardio {
 		}
 
 		pub fn build_matrix_and_get_bounds(&mut self, time_bound: f64) -> (f64, f64) {
-			env_logger::init();
+			let _ = env_logger::try_init();
 			debug!("Satisfying state count: {}", self.satisfying_state_count);
 			let model_context = self.matrix_builder.to_model_context(&self.labelling, false);
 			let state_count = model_context.state_count();

@@ -66,6 +66,7 @@ where
 	) -> ExplicitRewards
 	where
 		StateIterator: ExactSizeIterator<Item = StateType> + Clone,
+		StateType: Clone,
 	{
 		let state_rewards = &self.state_rewards;
 		let tran_rewards = &self.transition_rewards;
@@ -99,12 +100,15 @@ where
 
 		// Transition rewards matrix builder
 		let mut trew_matb = OptimalSprsMatBuilder::with_row_capacity(state_count, Some(15));
-		for (source, dest) in states.clone().zip(states) {
-			if let Some(tran_reward) = tran_rewards(&source, &dest) {
-				let row = state_to_id(source);
-				let col = state_to_id(dest);
+		let states_clone = states.clone();
+		for source in states_clone.clone() {
+			for dest in states_clone.clone() {
+				if let Some(tran_reward) = tran_rewards(&source, &dest) {
+					let row = state_to_id(source.clone());
+					let col = state_to_id(dest.clone());
 
-				trew_matb.insert(row, col, tran_reward);
+					trew_matb.insert(row, col, tran_reward);
+				}
 			}
 		}
 

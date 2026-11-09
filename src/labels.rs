@@ -63,7 +63,7 @@ impl Labels {
 
 	/// Gets the name of a label given its index. If the index is out of range, returns `None`.
 	pub fn index_to_label(&self, label_index: usize) -> Option<String> {
-		if self.label_names.len() >= label_index {
+		if self.label_names.len() <= label_index {
 			None
 		} else {
 			Some(self.label_names[label_index].0.clone())
@@ -141,7 +141,7 @@ impl Labels {
 
 	/// Creates a bitvector of relevant states given a label bitmask
 	pub fn create_relevant(&self, label_bitmask: &BitVec, num_states: usize) -> BitVec {
-		let sat_iterator = (0..=num_states).map(|idx| self.state_has_labels(idx, label_bitmask));
+		let sat_iterator = (0..num_states).map(|idx| self.state_has_labels(idx, label_bitmask));
 		BitVec::from_iter(sat_iterator)
 	}
 
@@ -183,5 +183,55 @@ mod label_tests {
 		labels.add_label_to_state(1, 2);
 		assert!(labels.state_has_label(2, 1));
 		assert!(!labels.state_has_label(2, 0));
+	}
+
+	#[test]
+	fn index_to_label_roundtrip() {
+		let labels = Labels::with_abs_and_sat();
+		assert_eq!(labels.index_to_label(0), Some("absorbing".to_string()));
+		assert_eq!(labels.index_to_label(1), Some("satisfying".to_string()));
+		assert_eq!(labels.index_to_label(2), None);
+	}
+
+	#[test]
+	fn create_relevant_length() {
+		let labels = Labels::with_abs_and_sat();
+		let mask = labels.create_label_bitmask(vec![]);
+		let rel = labels.create_relevant(&mask, 5);
+		assert_eq!(rel.len(), 5);
+	}
+
+	#[test]
+	fn randomized_state_labels() {
+		let mut labels = Labels::with_abs_and_sat();
+		for i in 0..50usize {
+			labels.add_label_to_state(i % 2, i + 2);
+		}
+		for i in 0..50usize {
+			let expected = (i % 2 == 0) == false; // not exact; just check no panic
+			let _ = labels.state_has_label(i + 2, i % 2);
+		}
+	}
+}
+
+#[cfg(kani)]
+mod kani_proofs {
+	use super::*;
+
+	#[kani::proof]
+	fn index_to_label_in_bounds() {
+		let labels = Labels::with_abs_and_sat();
+		let idx: usize = kani::any();
+		kani::assume(idx < labels.label_count());
+		assert!(labels.index_to_label(idx).is_some());
+	}
+
+	#[kani::proof]
+	fn state_has_label_no_panic() {
+		let labels = Labels::with_abs_and_sat();
+		let state: usize = kani::any();
+		let label: usize = kani::any();
+		kani::assume(label < labels.label_count());
+		let _ = labels.state_has_label(state, label);
 	}
 }

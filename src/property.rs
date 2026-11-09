@@ -1,6 +1,5 @@
 use std::ops;
 
-use crate::matrix::CheckableNumber;
 use crate::parser::{lex, parse_path_formula, parse_state_formula};
 
 /// A trait for anything we can throw in a .props, .csl, or .pctl file.
@@ -55,7 +54,7 @@ impl AtomicExpression {
 				let rhs_val = rhs.evaluate_value()?;
 				let res = match op {
 					BinaryApOperator::Plus => lhs_val + rhs_val,
-					BinaryApOperator::Minus => lhs_val + rhs_val,
+					BinaryApOperator::Minus => lhs_val - rhs_val,
 					BinaryApOperator::Multipy => lhs_val * rhs_val,
 				};
 				Some(res)
@@ -80,7 +79,7 @@ impl AtomicExpression {
 			// If a variable or a value, we can't simplify
 			Self::Value(_) | Self::Variable(_) => self.clone(),
 			// Here we can try to simplify it
-			Self::BinaryOperator(op, lhs, rhs) => {
+			Self::BinaryOperator(_op, _lhs, _rhs) => {
 				unimplemented!()
 			}
 		}
@@ -125,7 +124,7 @@ impl Property for AtomicProposition {
 	where
 		Self: Sized,
 	{
-		let tokens = lex(input);
+		let _tokens = lex(input);
 		unimplemented!();
 	}
 }
@@ -446,7 +445,7 @@ impl PathFormula {
 
 #[cfg(test)]
 mod property_tests {
-	use super::{Interval, PathFormula, ProbabilityQueryType, Property, StateFormula};
+	use super::{AtomicExpression, BinaryApOperator, Interval, PathFormula, ProbabilityQueryType, Property, StateFormula};
 
 	#[test]
 	fn construction_test() {
@@ -470,6 +469,16 @@ mod property_tests {
 	// let phi: StateFormula = StateFormula::AtomicProposition(evalexpr::)
 	//unimplemented!();
 	//}
+
+	#[test]
+	fn evaluate_value_minus() {
+		let expr = AtomicExpression::BinaryOperator(
+			BinaryApOperator::Minus,
+			Box::new(AtomicExpression::Value(10)),
+			Box::new(AtomicExpression::Value(3)),
+		);
+		assert_eq!(expr.evaluate_value(), Some(7));
+	}
 
 	#[test]
 	fn parse_test() {
