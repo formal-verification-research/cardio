@@ -77,7 +77,7 @@ Run with:
 - Prove Fox-Glynn truncation bounds (currently validated empirically vs. SciPy).
 - Prove checker transient/until algorithms (currently validated empirically vs. Storm).
 - Add randomized differential tests for `TimeBoundWindow` and `TimeBoundedLower`.
-- Remove or implement `unimplemented!()` paths in `matrix.rs` (`to_inf_matrix` for `ExplicitSprsMatBuilder`) and `property.rs`.
+- `ExplicitSprsMatBuilder::to_unif_matrix` is now implemented; `to_emb_dtmc` and `AtomicProposition::parse` remain unimplemented (experimental/unused).
 
 ## Why some components are not verifiable
 

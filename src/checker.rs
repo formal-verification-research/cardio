@@ -33,8 +33,7 @@ where
 	f64: CheckableNumber,
 {
 	pub fn new(
-		#[allow(dead_code)]
-	discrete_time: bool,
+		#[allow(dead_code)] discrete_time: bool,
 		labels: &labels::Labels,
 		uniformized_matrix: &CsMat<f64>,
 		epoch: f64,
@@ -244,8 +243,7 @@ impl CheckContext {
 		// Initialize the bitvector to all zeros
 		(0..state_count).for_each(|_| pns.push(false));
 		for idx in 0..state_count {
-			if model.labels.state_has_labels(idx, phi) && !model.labels.state_has_labels(idx, psi)
-			{
+			if model.labels.state_has_labels(idx, phi) && !model.labels.state_has_labels(idx, psi) {
 				pns.set(idx, true);
 			}
 		}

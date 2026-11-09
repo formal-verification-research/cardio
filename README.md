@@ -49,6 +49,8 @@ python tests/toy.py
 
 ## Formal verification
 
+See `VERIFICATION.md` for the verification inventory and remaining work.
+
 Optional Kani proofs are gated behind `cfg(kani)`. Install Kani and run:
 
 ```bash

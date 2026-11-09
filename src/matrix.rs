@@ -44,44 +44,6 @@ impl CheckableNumber for f32 {}
 impl CheckableNumber for Rational64 {}
 impl CheckableNumber for Rational32 {}
 
-/// Uniformizes an infantesimile generator matrix for a markov automata
-pub fn uniformize_ma(
-	matrix: &mut sprs::CsMat<f64>,
-	steps: &mut Vec<(usize, f64)>,
-	rates: Vec<f64>,
-	unif_rate: f64,
-	deadlock: &BitVec,
-) {
-	// `deadlock` marks the states (rows) that are deadlocks in the Markov automaton
-	// and therefore need to be uniformized. Each such row is scaled so that its exit
-	// rate matches `unif_rate`.
-	for deadlock_state in deadlock.iter_ones() {
-		let row = deadlock_state;
-		let old_rate = rates[row];
-		if old_rate == unif_rate {
-			// We don't need to uniformize this row.
-			continue;
-		}
-		// The matrix is stored in CSC form, so the outer dimension represents
-		// destination columns. We adjust the entry in each column that corresponds
-		// to the source row `row`.
-		for (col_idx, mut col) in matrix.outer_iterator_mut().enumerate() {
-			let val = col[row];
-			col[row] = if col_idx == row {
-				// Compute the new self-loop probability.
-				let sloop = unif_rate - old_rate + val * old_rate;
-				sloop / unif_rate
-			} else {
-				val * old_rate / unif_rate
-			};
-		}
-	}
-	for step in steps.iter_mut() {
-		let index = step.0;
-		step.1 *= rates[index] / unif_rate;
-	}
-}
-
 /// (Re)-uniformizes a uniformized matrix given that it has already been uniformized
 pub fn reuniformize_ma(
 	matrix: &mut sprs::CsMat<f64>,
@@ -232,7 +194,7 @@ impl OptimalSprsMatBuilder {
 	pub fn with_row_capacity(capacity: usize, abstract_transition_count: Option<usize>) -> Self {
 		Self {
 			data: Vec::with_capacity(capacity),
-			queued_new_size: capacity,
+			queued_new_size: 0,
 			length: 0,
 			state_count: 0,
 			abstract_transition_count,
@@ -249,6 +211,9 @@ impl OptimalSprsMatBuilder {
 
 	/// Applies the queued new size to the datastructure size
 	pub fn apply_queued_size(&mut self) {
+		if self.state_count == 0 {
+			return;
+		}
 		self.resize(self.queued_new_size);
 	}
 
@@ -341,7 +306,7 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 	}
 
 	fn row_count(&self) -> usize {
-		self.data.len()
+		self.state_count
 	}
 
 	/// Gets the sum of a row. Useful for uniformization in CTMCs.
@@ -414,7 +379,10 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 	fn to_inf_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
 		self.apply_queued_size();
 		// We have to do it this way since the `Sub` trait isn't implemented for sparse matrices.
-		let epoch = self.epoch();
+		let mut epoch = self.epoch();
+		if epoch == 0.0 {
+			epoch = 1.0;
+		}
 		let state_count = self.state_count;
 
 		// TODO: remove this when we get direct CsMat construction to work
@@ -438,7 +406,10 @@ impl SprsMatBuilder for OptimalSprsMatBuilder {
 		self.apply_queued_size();
 		// Like in to_inf_matrix, we have to do it this way since `Sub` isn't implemented for
 		// sprs::CsMat
-		let epoch = self.epoch();
+		let mut epoch = self.epoch();
+		if epoch == 0.0 {
+			epoch = 1.0;
+		}
 		info!("Uniformizing matrix with rate {epoch}");
 		let state_count = self.state_count;
 
@@ -550,7 +521,40 @@ impl SprsMatBuilder for ExplicitSprsMatBuilder {
 	}
 
 	fn to_unif_matrix(&mut self) -> (f64, sprs::CsMat<f64>) {
-		unimplemented!();
+		let state_count = self.rows().max(self.cols());
+		// Aggregate duplicate triplets per (row, col).
+		let mut row_sums = vec![0.0f64; state_count];
+		let mut entries: Vec<std::collections::BTreeMap<usize, f64>> =
+			vec![std::collections::BTreeMap::new(); state_count];
+		for i in 0..self.data().len() {
+			let row = self.row_inds()[i];
+			let col = self.col_inds()[i];
+			let val = self.data()[i];
+			if row < state_count && col < state_count {
+				*entries[row].entry(col).or_insert(0.0) += val;
+				row_sums[row] += val;
+			}
+		}
+		let mut epoch = row_sums.iter().copied().fold(0.0f64, f64::max);
+		if epoch == 0.0 {
+			epoch = 1.0;
+		}
+		let mut m = sprs::TriMat::new((state_count, state_count));
+		for row in 0..state_count {
+			let mut had_self_loop = false;
+			for (col, value) in &entries[row] {
+				if *col == row {
+					m.add_triplet(row, *col, (*value - row_sums[row]) / epoch + 1.0);
+					had_self_loop = true;
+				} else {
+					m.add_triplet(row, *col, *value / epoch);
+				}
+			}
+			if !had_self_loop {
+				m.add_triplet(row, row, 1.0 - row_sums[row] / epoch);
+			}
+		}
+		(epoch, m.to_csc())
 	}
 }
 
@@ -610,6 +614,15 @@ mod matrix_tests {
 			let got = mb.get_value(row, col).unwrap();
 			assert!((got - val).abs() < 1e-12);
 		}
+	}
+
+	#[test]
+	fn row_count_matches_state_count() {
+		let mut mb = OptimalSprsMatBuilder::new();
+		mb.insert(3, 5, 1.0);
+		mb.insert(1, 0, 2.0);
+		assert_eq!(mb.row_count(), 6);
+		assert_eq!(mb.state_count, 6);
 	}
 
 	#[test]
