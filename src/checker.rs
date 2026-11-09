@@ -17,6 +17,7 @@ where
 	f64: CheckableNumber,
 {
 	/// Whether the model is in discrete or continuous time
+	#[allow(dead_code)]
 	discrete_time: bool,
 	/// The state and transition labelling
 	labels: labels::Labels,
@@ -32,7 +33,8 @@ where
 	f64: CheckableNumber,
 {
 	pub fn new(
-		discrete_time: bool,
+		#[allow(dead_code)]
+	discrete_time: bool,
 		labels: &labels::Labels,
 		uniformized_matrix: &CsMat<f64>,
 		epoch: f64,
@@ -209,7 +211,7 @@ impl CheckContext {
 		assert!(self.relevant_states.len() == state_count);
 		let mut relevant_state_count = 0;
 		for (idx, &val) in self.distribution.iter() {
-			if val != 0.0 && model.labels.state_has_labels(idx, &label_indecies) {
+			if val != 0.0 && model.labels.state_has_labels(idx, label_indecies) {
 				self.relevant_states.set(idx, true);
 				relevant_state_count += 1;
 			}
@@ -242,7 +244,7 @@ impl CheckContext {
 		// Initialize the bitvector to all zeros
 		(0..state_count).for_each(|_| pns.push(false));
 		for idx in 0..state_count {
-			if model.labels.state_has_labels(idx, &phi) && !model.labels.state_has_labels(idx, &psi)
+			if model.labels.state_has_labels(idx, phi) && !model.labels.state_has_labels(idx, psi)
 			{
 				pns.set(idx, true);
 			}
@@ -265,7 +267,7 @@ impl CheckContext {
 			.distribution
 			.iter()
 			.filter_map(|(idx, &val)| {
-				if model.labels.state_has_labels(idx, &label_indecies) {
+				if model.labels.state_has_labels(idx, label_indecies) {
 					Some((idx, val.clone()))
 				} else {
 					None
@@ -279,6 +281,7 @@ impl CheckContext {
 
 /// A CSL or PCTL model checker.
 pub struct CslChecker {
+	#[allow(dead_code)]
 	use_mixed_poisson: bool,
 }
 
