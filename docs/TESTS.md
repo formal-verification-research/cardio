@@ -100,7 +100,7 @@ Expected/actual:
 
 - State count: `9722`.
 - Max exit rate: `6.2`.
-- Cardio: `[4.8091177643074e-12, 0.999999999999999]`, ~`6.11 s`.
+- Cardio: `[4.8091177643074e-12, 0.999999999999999]`, ~`0.068 s` (release build).
 - Storm: `[4.809117764307402e-12, 0.9999999999999989]`, ~`0.11 s`.
 - Absorbing-state probability: `0.9999999999951894`.
 - Bounds agree within tolerance.
