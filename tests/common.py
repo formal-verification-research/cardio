@@ -147,3 +147,7 @@ class Model:
 			abs_prop = stormpy.parse_properties(f"P=? [ true U[0, {time_bound}] \"absorbing\" ]")[0]
 			abs_res = stormpy.check_model_sparse(storm_ctmc, abs_prop, only_initial_states=True)
 			print(f"Absorbing state probability: {abs_res.at(1)}")
+		return {
+			"cardio": (lower_bound, upper_bound) if not bypass_cardio else None,
+			"storm": (pmin, pmax) if not bypass_storm else None,
+		}
